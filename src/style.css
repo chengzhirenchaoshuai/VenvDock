@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* 全局基础样式：跟随系统深浅色 */
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  @apply bg-zinc-50 text-zinc-900 antialiased select-none dark:bg-zinc-950 dark:text-zinc-100;
+  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: "Cascadia Mono", "Consolas", "Microsoft YaHei UI", monospace;
+}
+
+/* 通用组件样式 */
+@utility input {
+  @apply w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none transition
+    placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-3 focus:ring-indigo-500/20
+    dark:border-zinc-700 dark:bg-zinc-900 dark:placeholder:text-zinc-500;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition
+    disabled:pointer-events-none disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply btn bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 active:bg-indigo-700;
+}
+
+@utility btn-secondary {
+  @apply btn border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100
+    dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800;
+}
+
+@utility icon-btn {
+  @apply inline-flex size-8 items-center justify-center rounded-lg text-zinc-500 transition
+    hover:bg-zinc-100 hover:text-zinc-900 disabled:pointer-events-none disabled:opacity-40
+    dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full border-2 border-solid border-transparent bg-zinc-300 bg-clip-padding dark:bg-zinc-700;
+}
