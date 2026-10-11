@@ -34,10 +34,15 @@
 | 📜 **实时日志** | 界面内实时查看、筛选、按级别着色；按大小轮转写入文件；自动处理 GBK / UTF-8 混合输出 |
 | 🐍 **venv 支持** | 指定虚拟环境即等同于先激活它；可设置工作目录、日志目录、环境变量 |
 | 🖥️ **托盘常驻** | 开机自启（默认只在托盘）、单实例、关闭窗口即最小化到托盘 |
+| 🪶 **低占用** | 窗口关闭 30 秒后释放 WebView，后台常驻约 12 MB 内存；开机启动时不加载界面，约 4 MB |
+| 💼 **免安装版** | 解压即用，配置和日志都保存在程序旁的 `data` 文件夹 |
 
 ## 📦 安装
 
-从 [Releases](../../releases/latest) 下载 `VenvDock_x.y.z_x64-setup.exe` 并运行，按当前用户安装，无需管理员权限。
+从 [Releases](../../releases/latest) 下载：
+
+- **安装版** `VenvDock_x.y.z_x64-setup.exe`：按当前用户安装，无需管理员权限
+- **免安装版** `VenvDock_x.y.z_x64-portable.zip`：解压后运行 `VenvDock.exe`
 
 > 依赖系统自带的 WebView2（Windows 10/11 均已预装）。
 
@@ -58,10 +63,12 @@
 
 ## 📁 文件位置
 
-| 内容 | 路径 |
-|---|---|
-| 配置 | `%APPDATA%\com.venvdock.app\config.json` |
-| 日志（默认） | `%APPDATA%\com.venvdock.app\logs\<项目名>.log` |
+| 内容 | 安装版 | 免安装版 |
+|---|---|---|
+| 配置 | `%APPDATA%\com.venvdock.app\config.json` | `data\config.json` |
+| 日志（默认） | `%APPDATA%\com.venvdock.app\logs\<项目名>.log` | `data\logs\<项目名>.log` |
+
+> 程序所在目录存在 `data` 文件夹时即为便携模式。
 
 ## 🛠️ 开发
 
@@ -69,8 +76,9 @@
 
 ```bash
 pnpm install
-pnpm tauri dev      # 开发运行（开发版不会写入开机自启注册表项）
-pnpm tauri build    # 打包，输出到 src-tauri/target/release/bundle/nsis/
+pnpm tauri dev                # 开发运行（开发版不会写入开机自启注册表项）
+pnpm tauri build              # 打包安装版，输出到 src-tauri/target/release/bundle/nsis/
+pnpm package:portable         # 再打包免安装版 zip，输出到 bundle/portable/
 ```
 
 ```text
@@ -83,5 +91,7 @@ src-tauri/src/
 │  ├─ loghub.rs       实时日志推送
 │  ├─ logs.rs         行切分、编码处理、日志轮转
 │  └─ win.rs          Win32 封装（Job Object、Ctrl+C 等）
+├─ window.rs          主窗口按需创建、隐藏后销毁
+├─ paths.rs           数据目录（安装版 / 便携版）
 └─ commands.rs        前端调用的命令
 ```

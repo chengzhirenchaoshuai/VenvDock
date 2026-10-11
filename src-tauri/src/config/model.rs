@@ -31,6 +31,8 @@ pub struct Project {
     pub auto_start: bool,
     /// 非手动停止时自动重启
     pub auto_restart: bool,
+    /// 服务的网页地址（可选）；为空时从日志中自动识别
+    pub url: String,
 }
 
 /// 全局设置
@@ -53,6 +55,10 @@ pub struct Settings {
     pub log_max_size_mb: u32,
     /// 每个项目保留的历史日志文件数
     pub log_keep_files: u32,
+    /// 界面主题：default（默认）或 mist（晨雾）
+    pub theme: String,
+    /// 外观：system（跟随系统）、light 或 dark
+    pub appearance: String,
 }
 
 impl Default for Settings {
@@ -66,6 +72,8 @@ impl Default for Settings {
             max_restart_attempts: 5,
             log_max_size_mb: 10,
             log_keep_files: 5,
+            theme: "default".into(),
+            appearance: "system".into(),
         }
     }
 }
@@ -81,6 +89,13 @@ impl Settings {
         self.max_restart_attempts = self.max_restart_attempts.min(100);
         self.log_max_size_mb = self.log_max_size_mb.clamp(1, 1024);
         self.log_keep_files = self.log_keep_files.clamp(1, 50);
+        // 未知取值（手动改坏配置或旧版本）回退为默认
+        if !["default", "mist"].contains(&self.theme.as_str()) {
+            self.theme = "default".into();
+        }
+        if !["system", "light", "dark"].contains(&self.appearance.as_str()) {
+            self.appearance = "system".into();
+        }
         self
     }
 }
@@ -126,6 +141,7 @@ impl Project {
         self.venv_path = normalize_path(&self.venv_path);
         self.work_dir = normalize_path(&self.work_dir);
         self.log_dir = normalize_path(&self.log_dir);
+        self.url = self.url.trim().to_string();
         for var in &mut self.env {
             var.key = var.key.trim().to_string();
         }
@@ -140,6 +156,12 @@ impl Project {
             .any(|p| p.name.eq_ignore_ascii_case(&self.name))
         {
             return Err(format!("已存在名为“{}”的项目", self.name));
+        }
+        if !self.url.is_empty()
+            && !self.url.starts_with("http://")
+            && !self.url.starts_with("https://")
+        {
+            return Err("网址需以 http:// 或 https:// 开头".into());
         }
         if self.command.is_empty() {
             return Err("启动命令不能为空".into());

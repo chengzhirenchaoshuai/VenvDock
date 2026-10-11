@@ -1,6 +1,129 @@
 @import "tailwindcss";
+@import "@fontsource-variable/manrope";
 
-/* 全局基础样式：跟随系统深浅色 */
+/* 深色变体跟随 <html data-mode>，而不是系统设置（外观可在设置里手动指定） */
+@custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
+
+/* 语义化主题变量：组件只用这些名字，具体取值由下方各主题提供 */
+@theme inline {
+  --color-bg: var(--vd-bg);
+  --color-surface: var(--vd-surface);
+  --color-subtle: var(--vd-subtle);
+  --color-line: var(--vd-line);
+  --color-line-strong: var(--vd-line-strong);
+  --color-card-line: var(--vd-card-line);
+  --color-fg: var(--vd-fg);
+  --color-muted: var(--vd-muted);
+  --color-faint: var(--vd-faint);
+  --color-accent: var(--vd-accent);
+  --color-accent-hover: var(--vd-accent-hover);
+  --color-accent-fg: var(--vd-accent-fg);
+  --color-ok: var(--vd-ok);
+  --color-warn: var(--vd-warn);
+  --color-fail: var(--vd-fail);
+  --color-log-bg: var(--vd-log-bg);
+  --color-logo-fg: var(--vd-logo-fg);
+  --radius-card: var(--vd-radius-card);
+  --radius-ctl: var(--vd-radius-ctl);
+  --shadow-card: var(--vd-shadow-card);
+}
+
+/* ---------- 默认主题（浅色），也是未设置时的取值 ---------- */
+:root {
+  --vd-font: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --vd-bg: #fafafa;
+  --vd-surface: #ffffff;
+  --vd-subtle: #f4f4f5;
+  --vd-line: #e4e4e7;
+  --vd-line-strong: #d4d4d8;
+  --vd-card-line: #e4e4e7;
+  --vd-fg: #18181b;
+  --vd-muted: #71717a;
+  --vd-faint: #a1a1aa;
+  --vd-accent: #4f46e5;
+  --vd-accent-hover: #6366f1;
+  --vd-accent-fg: #ffffff;
+  --vd-ok: #047857;
+  --vd-warn: #b45309;
+  --vd-fail: #be123c;
+  --vd-log-bg: #09090b;
+  --vd-logo-bg: linear-gradient(135deg, #6366f1, #7c3aed);
+  --vd-logo-fg: #ffffff;
+  --vd-radius-card: 12px;
+  --vd-radius-ctl: 8px;
+  --vd-shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
+  color-scheme: light;
+}
+
+/* ---------- 默认主题（深色） ---------- */
+:root[data-skin="default"][data-mode="dark"] {
+  --vd-bg: #09090b;
+  --vd-surface: #18181b;
+  --vd-subtle: #27272a;
+  --vd-line: #27272a;
+  --vd-line-strong: #3f3f46;
+  --vd-card-line: #27272a;
+  --vd-fg: #f4f4f5;
+  --vd-muted: #a1a1aa;
+  --vd-faint: #71717a;
+  --vd-accent: #6366f1;
+  --vd-accent-hover: #818cf8;
+  --vd-ok: #34d399;
+  --vd-warn: #fbbf24;
+  --vd-fail: #fb7185;
+  --vd-shadow-card: none;
+  color-scheme: dark;
+}
+
+/* ---------- 晨雾（浅色）：蓝灰底、无边框白卡片、柔和阴影、青绿主色 ---------- */
+:root[data-skin="mist"] {
+  --vd-font: "Manrope Variable", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  --vd-bg: #edf1f4;
+  --vd-surface: #ffffff;
+  --vd-subtle: #f1f5f8;
+  --vd-line: #e3e9ee;
+  --vd-line-strong: #d3dbe1;
+  --vd-card-line: transparent;
+  --vd-fg: #1d2b36;
+  --vd-muted: #687b89;
+  --vd-faint: #9aabb7;
+  --vd-accent: #0d7f81;
+  --vd-accent-hover: #0f9294;
+  --vd-accent-fg: #ffffff;
+  --vd-ok: #12924a;
+  --vd-warn: #b97300;
+  --vd-fail: #d93d42;
+  --vd-log-bg: #0e151a;
+  --vd-logo-bg: #1d2b36;
+  --vd-logo-fg: #7fe0d6;
+  --vd-radius-card: 16px;
+  --vd-radius-ctl: 10px;
+  --vd-shadow-card: 0 10px 28px -16px rgb(29 43 54 / 0.35);
+}
+
+/* ---------- 晨雾（深色）：深海蓝 ---------- */
+:root[data-skin="mist"][data-mode="dark"] {
+  --vd-bg: #121a20;
+  --vd-surface: #1a242c;
+  --vd-subtle: #22303a;
+  --vd-line: #24313b;
+  --vd-line-strong: #33434f;
+  --vd-card-line: #24313b;
+  --vd-fg: #e4ecf1;
+  --vd-muted: #8a9dab;
+  --vd-faint: #627584;
+  --vd-accent: #3cc5c7;
+  --vd-accent-hover: #5fd3d4;
+  --vd-accent-fg: #06282a;
+  --vd-ok: #3dd68c;
+  --vd-warn: #f2b544;
+  --vd-fail: #ff6f73;
+  --vd-logo-bg: #3cc5c7;
+  --vd-logo-fg: #06282a;
+  --vd-shadow-card: 0 10px 28px -16px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
 html,
 body,
 #app {
@@ -8,8 +131,8 @@ body,
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 antialiased select-none dark:bg-zinc-950 dark:text-zinc-100;
-  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  @apply bg-bg text-fg antialiased select-none;
+  font-family: var(--vd-font);
 }
 
 .font-mono {
@@ -18,29 +141,26 @@ body {
 
 /* 通用组件样式 */
 @utility input {
-  @apply w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none transition
-    placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-3 focus:ring-indigo-500/20
-    dark:border-zinc-700 dark:bg-zinc-900 dark:placeholder:text-zinc-500;
+  @apply w-full rounded-ctl border border-line-strong bg-surface px-3 py-2 text-sm outline-none transition
+    placeholder:text-faint focus:border-accent focus:ring-3 focus:ring-accent/20;
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition
+  @apply inline-flex items-center justify-center gap-1.5 rounded-ctl px-3.5 py-2 text-sm font-medium transition
     disabled:pointer-events-none disabled:opacity-50;
 }
 
 @utility btn-primary {
-  @apply btn bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 active:bg-indigo-700;
+  @apply btn bg-accent text-accent-fg shadow-sm hover:bg-accent-hover;
 }
 
 @utility btn-secondary {
-  @apply btn border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100
-    dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800;
+  @apply btn border border-line-strong bg-surface text-fg hover:bg-subtle;
 }
 
 @utility icon-btn {
-  @apply inline-flex size-8 items-center justify-center rounded-lg text-zinc-500 transition
-    hover:bg-zinc-100 hover:text-zinc-900 disabled:pointer-events-none disabled:opacity-40
-    dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100;
+  @apply inline-flex size-8 items-center justify-center rounded-ctl text-muted transition
+    hover:bg-subtle hover:text-fg disabled:pointer-events-none disabled:opacity-40;
 }
 
 /* 细滚动条 */
@@ -49,5 +169,5 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full border-2 border-solid border-transparent bg-zinc-300 bg-clip-padding dark:bg-zinc-700;
+  @apply rounded-full border-2 border-solid border-transparent bg-line-strong bg-clip-padding;
 }

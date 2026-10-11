@@ -173,3 +173,84 @@ pub fn read_tail(path: &Path, max_lines: usize) -> Vec<String> {
     let skip = lines.len().saturating_sub(max_lines);
     lines[skip..].iter().map(|l| l.to_string()).collect()
 }
+
+/// 视为本机的主机名；0.0.0.0 和 [::] 是监听所有网卡，浏览器里要换成 127.0.0.1
+const LOCAL_HOSTS: [&str; 5] = ["127.0.0.1", "localhost", "0.0.0.0", "[::]", "[::1]"];
+
+/// 从一行日志中找出第一个本机网址，例如 “Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)”
+pub fn detect_local_url(line: &str) -> Option<String> {
+    for (i, _) in line.match_indices("http") {
+        let rest = &line[i..];
+        let Some(after) = rest
+            .strip_prefix("http://")
+            .or_else(|| rest.strip_prefix("https://"))
+        else {
+            continue;
+        };
+        // 网址到空白、引号、括号或控制字符（如 ANSI 颜色码）为止，再去掉句末标点
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c.is_control() || "\"'<>(),".contains(c))
+            .unwrap_or(rest.len());
+        let url = rest[..end].trim_end_matches(['.', ';', ':']);
+        let host_end = after.find([':', '/']).map_or(after.len(), |p| {
+            // IPv6 地址形如 [::1]:8080，冒号在方括号内
+            if after.starts_with('[') {
+                after.find(']').map_or(p, |b| b + 1)
+            } else {
+                p
+            }
+        });
+        let host = after[..host_end.min(after.len())].to_ascii_lowercase();
+        if LOCAL_HOSTS.contains(&host.as_str()) {
+            let scheme_len = rest.len() - after.len();
+            let shown = if host == "0.0.0.0" || host == "[::]" {
+                "127.0.0.1"
+            } else {
+                &host
+            };
+            return Some(format!(
+                "{}{}{}",
+                &url[..scheme_len],
+                shown,
+                &url[scheme_len + host_end.min(url.len() - scheme_len)..]
+            ));
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::detect_local_url;
+
+    #[test]
+    fn 识别本机网址() {
+        let cases = [
+            (
+                "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+                Some("http://127.0.0.1:8080"),
+            ),
+            (
+                "Running on local URL:  http://127.0.0.1:7860",
+                Some("http://127.0.0.1:7860"),
+            ),
+            (
+                "To see the GUI go to: http://127.0.0.1:8188.",
+                Some("http://127.0.0.1:8188"),
+            ),
+            (
+                "listening at \x1b[1mhttp://localhost:3000/\x1b[0m",
+                Some("http://localhost:3000/"),
+            ),
+            (
+                "server on http://[::]:9000/api",
+                Some("http://127.0.0.1:9000/api"),
+            ),
+            ("Downloading https://huggingface.co/model.bin", None),
+            ("no url here", None),
+        ];
+        for (line, expected) in cases {
+            assert_eq!(detect_local_url(line).as_deref(), expected, "{line}");
+        }
+    }
+}

@@ -15,11 +15,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
 <template>
   <div
-    class="fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/40 p-6 backdrop-blur-[2px]"
+    class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6 backdrop-blur-[2px]"
     @mousedown.self="emit('close')"
   >
     <div
-      class="flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+      class="flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl"
       :class="width ?? 'max-w-xl'"
     >
       <header class="flex items-center justify-between px-6 pt-5 pb-3">

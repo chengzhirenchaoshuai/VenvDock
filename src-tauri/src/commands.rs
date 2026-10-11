@@ -1,7 +1,8 @@
 //! 暴露给前端调用的命令
 use crate::config::{Config, ConfigStore, Project, Settings};
 use crate::runtime::{ProjectStatus, Supervisor};
-use tauri::{AppHandle, State};
+use crate::tray::CONFIG_EVENT;
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
@@ -11,19 +12,28 @@ pub fn get_config(store: State<'_, ConfigStore>) -> Config {
 
 /// 新建或更新项目；id 为空表示新建。运行中的项目修改后在下次启动时生效
 #[tauri::command]
-pub fn save_project(store: State<'_, ConfigStore>, project: Project) -> Result<Project, String> {
-    store.upsert_project(project)
+pub fn save_project(
+    app: AppHandle,
+    store: State<'_, ConfigStore>,
+    project: Project,
+) -> Result<Project, String> {
+    let saved = store.upsert_project(project)?;
+    let _ = app.emit(CONFIG_EVENT, ());
+    Ok(saved)
 }
 
 /// 删除项目：先停止其进程，再从配置中移除
 #[tauri::command]
 pub fn delete_project(
+    app: AppHandle,
     store: State<'_, ConfigStore>,
     supervisor: State<'_, Supervisor>,
     id: String,
 ) -> Result<(), String> {
     supervisor.remove(&id);
-    store.delete_project(&id)
+    store.delete_project(&id)?;
+    let _ = app.emit(CONFIG_EVENT, ());
+    Ok(())
 }
 
 #[tauri::command]

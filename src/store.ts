@@ -1,6 +1,7 @@
 // 全局状态：配置、各项目运行状态、提示消息
 import { reactive, ref } from "vue";
 import { api, type Config, type ProjectStatus } from "./api";
+import { applyTheme } from "./theme";
 
 export const state = reactive({
   config: null as Config | null,
@@ -20,6 +21,7 @@ export async function init() {
 export async function reload() {
   const [config, statuses] = await Promise.all([api.getConfig(), api.getStatuses()]);
   state.config = config;
+  applyTheme(config.settings.theme, config.settings.appearance);
   state.statuses = Object.fromEntries(statuses.map((s) => [s.id, s]));
 }
 

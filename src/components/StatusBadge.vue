@@ -8,28 +8,28 @@ const props = defineProps<{ phase: Phase }>();
 const STYLES: Record<Phase, { text: string; badge: string; dot: string }> = {
   running: {
     text: "运行中",
-    badge: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-400/20",
-    dot: "bg-emerald-500",
+    badge: "bg-ok/10 text-ok ring-ok/25",
+    dot: "bg-ok",
   },
   stopping: {
     text: "停止中",
-    badge: "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-400/20",
-    dot: "bg-amber-500",
+    badge: "bg-warn/10 text-warn ring-warn/25",
+    dot: "bg-warn",
   },
   backoff: {
     text: "等待重启",
-    badge: "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-400/20",
-    dot: "bg-amber-500",
+    badge: "bg-warn/10 text-warn ring-warn/25",
+    dot: "bg-warn",
   },
   failed: {
     text: "失败",
-    badge: "bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-400 dark:ring-rose-400/20",
-    dot: "bg-rose-500",
+    badge: "bg-fail/10 text-fail ring-fail/25",
+    dot: "bg-fail",
   },
   stopped: {
     text: "已停止",
-    badge: "bg-zinc-100 text-zinc-600 ring-zinc-500/20 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-400/20",
-    dot: "bg-zinc-400",
+    badge: "bg-subtle text-muted ring-line-strong",
+    dot: "bg-faint",
   },
 };
 

@@ -50,7 +50,7 @@ async function revealConfig() {
 <template>
   <Modal title="设置" @close="emit('close')">
     <form id="settings-form" class="space-y-5" @submit.prevent="save">
-      <section class="divide-y divide-zinc-100 rounded-lg border border-zinc-200 px-4 dark:divide-zinc-800 dark:border-zinc-800">
+      <section class="divide-y divide-line rounded-ctl border border-line px-4">
         <Toggle v-model="form.launchOnBoot" label="开机自动启动" description="登录 Windows 后在托盘中运行 VenvDock" />
         <Toggle v-model="form.showWindowOnStart" label="开机启动时显示主窗口" description="关闭则开机后只在托盘中运行；手动打开时总会显示" />
       </section>
@@ -60,19 +60,19 @@ async function revealConfig() {
           <span class="mb-1 block text-sm font-medium">{{ f.label }}</span>
           <div class="relative">
             <input v-model.number="form[f.key]" type="number" min="0" class="input pr-12" />
-            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-zinc-400">{{ f.unit }}</span>
+            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-faint">{{ f.unit }}</span>
           </div>
-          <span v-if="f.hint" class="mt-1 block text-xs text-zinc-500">{{ f.hint }}</span>
+          <span v-if="f.hint" class="mt-1 block text-xs text-muted">{{ f.hint }}</span>
         </label>
       </section>
 
-      <p v-if="error" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-400">
+      <p v-if="error" class="rounded-ctl bg-fail/10 px-3 py-2 text-sm text-fail">
         {{ error }}
       </p>
     </form>
 
     <template #footer>
-      <button class="btn mr-auto px-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100" @click="revealConfig">
+      <button class="btn mr-auto px-2 text-muted hover:text-fg" @click="revealConfig">
         <FileCog class="size-4" /> 打开配置文件位置
       </button>
       <button class="btn-secondary" @click="emit('close')">取消</button>

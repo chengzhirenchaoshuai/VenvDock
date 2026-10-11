@@ -1,17 +1,17 @@
 mod commands;
 mod config;
+mod paths;
 mod runtime;
+mod tray;
+mod window;
 
 pub use runtime::{CTRL_C_HELPER_ARG, run_ctrl_c_helper};
 
 use config::ConfigStore;
+use paths::AppPaths;
 use runtime::Supervisor;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{
-    AppHandle, Manager, WindowEvent,
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
-};
+use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
 
 /// 开机自启时附带的命令行参数，用于区分“开机启动”和“手动打开”
@@ -34,17 +34,8 @@ pub(crate) fn sync_autostart(app: &AppHandle, enabled: bool) {
     }
 }
 
-/// 显示并激活主窗口（同时处理最小化的情况）
-fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
-}
-
 /// 退出程序：先优雅停止所有项目（在后台线程等待，不卡界面），再退出
-fn quit_app(app: &AppHandle) {
+pub(crate) fn quit_app(app: &AppHandle) {
     static QUITTING: AtomicBool = AtomicBool::new(false);
     if QUITTING.swap(true, Ordering::SeqCst) {
         return;
@@ -59,45 +50,12 @@ fn quit_app(app: &AppHandle) {
     });
 }
 
-/// 创建托盘图标：双击显示主窗口，右键菜单提供“显示”和“退出”
-fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
-
-    TrayIconBuilder::with_id("main")
-        .icon(
-            app.default_window_icon()
-                .cloned()
-                .expect("缺少默认窗口图标"),
-        )
-        .tooltip("VenvDock")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => show_main_window(app),
-            "quit" => quit_app(app),
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::DoubleClick {
-                button: MouseButton::Left,
-                ..
-            } = event
-            {
-                show_main_window(tray.app_handle());
-            }
-        })
-        .build(app)?;
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // 单实例插件必须最先注册：再次打开程序时只唤出已有窗口
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app);
+            window::show(app);
         }))
         .plugin(
             tauri_plugin_autostart::Builder::new()
@@ -108,22 +66,20 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // 配置文件位于 %APPDATA%\com.venvdock.app\config.json
-            let config_path = app.path().app_config_dir()?.join("config.json");
-            let store = ConfigStore::load(config_path);
+            let paths = AppPaths::resolve(app.handle())?;
+            let store = ConfigStore::load(paths.config_file.clone());
             let settings = store.settings();
+            let supervisor = Supervisor::new(app.handle().clone(), paths.log_dir.clone());
+            app.manage(paths);
             app.manage(store);
             sync_autostart(app.handle(), settings.launch_on_boot);
-            // 默认日志目录：%APPDATA%\com.venvdock.app\logs
-            let log_dir = app.path().app_data_dir()?.join("logs");
-            let supervisor = Supervisor::new(app.handle().clone(), log_dir);
             app.manage(supervisor.clone());
-            setup_tray(app.handle())?;
+            tray::setup(app.handle())?;
             supervisor.start_auto_projects();
-            // 手动打开时总是显示窗口；开机自启时按设置决定，默认只在托盘
+            // 手动打开时总是显示窗口；开机自启时按设置决定，默认只在托盘（不创建 WebView）
             let boot_launch = std::env::args().any(|a| a == AUTOSTART_ARG);
             if !boot_launch || settings.show_window_on_start {
-                show_main_window(app.handle());
+                window::show(app.handle());
             }
             Ok(())
         })
@@ -142,12 +98,21 @@ pub fn run() {
             commands::restart_project,
         ])
         // 点击关闭按钮时只隐藏到托盘，真正退出走托盘菜单
-        .on_window_event(|window, event| {
+        .on_window_event(|win, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                window::hide(win);
             }
         })
-        .run(tauri::generate_context!())
-        .expect("启动 VenvDock 失败");
+        .build(tauri::generate_context!())
+        .expect("启动 VenvDock 失败")
+        .run(|_app, event| {
+            // 主窗口被销毁时不退出程序；只有托盘“退出”（app.exit 带退出码）才真正退出
+            if let RunEvent::ExitRequested {
+                code: None, api, ..
+            } = event
+            {
+                api.prevent_exit();
+            }
+        });
 }

@@ -6,5 +6,5 @@ mod supervisor;
 mod win;
 
 pub use runner::{LaunchSpec, RunningProcess};
-pub use supervisor::{ProjectStatus, Supervisor};
+pub use supervisor::{Phase, ProjectStatus, STATUS_EVENT, Supervisor};
 pub use win::{CTRL_C_HELPER_ARG, run_ctrl_c_helper};

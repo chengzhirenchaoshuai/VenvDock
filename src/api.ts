@@ -1,6 +1,7 @@
 // 与 Rust 端 config::model 一一对应的类型，以及命令调用封装
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { Appearance, Skin } from "./theme";
 
 export interface EnvVar {
   key: string;
@@ -18,6 +19,8 @@ export interface Project {
   env: EnvVar[];
   autoStart: boolean;
   autoRestart: boolean;
+  /** 网页地址（可选），为空时使用从日志识别到的地址 */
+  url: string;
 }
 
 export interface Settings {
@@ -29,6 +32,8 @@ export interface Settings {
   maxRestartAttempts: number;
   logMaxSizeMb: number;
   logKeepFiles: number;
+  theme: Skin;
+  appearance: Appearance;
 }
 
 export interface Config {
@@ -50,6 +55,8 @@ export interface ProjectStatus {
   restartCount: number;
   nextRestartAt: number | null;
   message: string | null;
+  /** 本次运行从日志识别到的本机网址 */
+  detectedUrl: string | null;
 }
 
 /** 实时日志推送的一批行 */
@@ -70,6 +77,7 @@ export function emptyProject(): Project {
     env: [],
     autoStart: false,
     autoRestart: true,
+    url: "",
   };
 }
 

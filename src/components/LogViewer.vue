@@ -104,8 +104,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-40 flex justify-end bg-zinc-950/40" @mousedown.self="emit('close')">
-    <section class="flex h-full w-[min(1100px,94vw)] flex-col bg-zinc-950 text-zinc-100 shadow-2xl">
+  <div class="fixed inset-0 z-40 flex justify-end bg-black/40" @mousedown.self="emit('close')">
+    <section class="flex h-full w-[min(1100px,94vw)] flex-col bg-log-bg text-zinc-100 shadow-2xl">
       <header class="flex items-center gap-3 border-b border-zinc-800 px-5 py-3">
         <h2 class="truncate text-sm font-semibold">{{ project.name }}</h2>
         <StatusBadge :phase="phase" />
@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
           <Search class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-zinc-500" />
           <input
             v-model="query"
-            class="w-full rounded-lg border border-zinc-800 bg-zinc-900 py-1.5 pr-3 pl-8 text-xs outline-none placeholder:text-zinc-500 focus:border-indigo-500"
+            class="w-full rounded-lg border border-zinc-800 bg-zinc-900 py-1.5 pr-3 pl-8 text-xs outline-none placeholder:text-zinc-500 focus:border-accent"
             placeholder="筛选日志"
             spellcheck="false"
           />
@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
         </div>
         <button
           v-if="!autoScroll"
-          class="absolute right-6 bottom-5 inline-flex items-center gap-1.5 rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-indigo-500"
+          class="absolute right-6 bottom-5 inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg shadow-lg hover:bg-accent-hover"
           @click="scrollToBottom"
         >
           <ArrowDownToLine class="size-3.5" /> 回到底部

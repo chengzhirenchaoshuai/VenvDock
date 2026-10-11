@@ -1,11 +1,12 @@
 //! 监管器：维护每个项目的运行状态，处理启动、停止、重启以及崩溃后的退避重启
 use super::loghub::LogHub;
-use super::logs::read_tail;
+use super::logs::{detect_local_url, read_tail};
 use super::{LaunchSpec, RunningProcess};
 use crate::config::ConfigStore;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -42,6 +43,8 @@ pub struct ProjectStatus {
     pub restart_count: u32,
     pub next_restart_at: Option<u64>,
     pub message: Option<String>,
+    /// 本次运行从日志中识别到的本机网址
+    pub detected_url: Option<String>,
 }
 
 impl ProjectStatus {
@@ -55,6 +58,7 @@ impl ProjectStatus {
             restart_count: 0,
             next_restart_at: None,
             message: None,
+            detected_url: None,
         }
     }
 }
@@ -120,6 +124,17 @@ impl Supervisor {
 
     fn store(&self) -> tauri::State<'_, ConfigStore> {
         self.0.app.state::<ConfigStore>()
+    }
+
+    /// 记录从日志识别到的网址（回调来自输出读取线程）
+    fn set_detected_url(&self, id: &str, generation: u64, url: String) {
+        let mut slots = self.lock();
+        if let Some(slot) = slots.get_mut(id)
+            && slot.generation == generation
+        {
+            slot.status.detected_url = Some(url);
+            self.emit(&slot.status);
+        }
     }
 
     fn emit(&self, status: &ProjectStatus) {
@@ -279,6 +294,7 @@ impl Supervisor {
         slot.stop_requested = false;
         slot.restart_after_stop = false;
         slot.status.next_restart_at = None;
+        slot.status.detected_url = None;
         slot.generation += 1;
 
         let store = self.store();
@@ -288,9 +304,19 @@ impl Supervisor {
                 let spec = LaunchSpec::new(&project, &store.settings(), &self.0.log_dir);
                 let (sup, generation, exit_id) = (self.clone(), slot.generation, id.clone());
                 let (hub, line_id) = (self.0.hub.clone(), id.clone());
+                // 每次运行只识别第一个本机网址，之后不再逐行检查
+                let (url_sup, url_found) = (self.clone(), AtomicBool::new(false));
                 RunningProcess::spawn(
                     &spec,
-                    Arc::new(move |line: &str| hub.push(&line_id, line)),
+                    Arc::new(move |line: &str| {
+                        hub.push(&line_id, line);
+                        if !url_found.load(Ordering::Relaxed)
+                            && let Some(url) = detect_local_url(line)
+                        {
+                            url_found.store(true, Ordering::Relaxed);
+                            url_sup.set_detected_url(&line_id, generation, url);
+                        }
+                    }),
                     move |code| sup.on_exit(&exit_id, generation, code),
                 )
             }
