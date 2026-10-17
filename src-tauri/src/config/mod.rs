@@ -2,5 +2,5 @@
 mod model;
 mod store;
 
-pub use model::{Config, Project, Settings};
+pub use model::{Config, Project, Settings, safe_filename};
 pub use store::ConfigStore;

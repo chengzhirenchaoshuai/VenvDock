@@ -7,26 +7,6 @@ use std::path::{Path, PathBuf};
 /// 单行最大字节数，超过后强制断行，防止无换行输出无限占用内存
 const MAX_LINE_BYTES: usize = 16 * 1024;
 
-/// 把项目名转换为合法的文件名
-pub fn safe_filename(name: &str) -> String {
-    let cleaned: String = name
-        .chars()
-        .map(|c| {
-            if "<>:\"/\\|?*".contains(c) || c.is_control() {
-                '_'
-            } else {
-                c
-            }
-        })
-        .collect();
-    let cleaned = cleaned.trim_matches(|c| c == ' ' || c == '.');
-    if cleaned.is_empty() {
-        "project".into()
-    } else {
-        cleaned.into()
-    }
-}
-
 /// 字节解码：合法 UTF-8 直接使用，否则按系统 OEM 代码页解码
 pub fn decode_line(bytes: &[u8]) -> String {
     match std::str::from_utf8(bytes) {

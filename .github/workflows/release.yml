@@ -1,0 +1,56 @@
+# 发布：推送 v* 标签后在 Windows 上构建安装版和免安装版，并上传到对应的 GitHub Release
+# 用法：git tag v0.3.0 && git push origin v0.3.0（标签版本应与 tauri.conf.json 一致）
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.9.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 检查标签与版本号一致
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "标签 ${{ github.ref_name }} 与 tauri.conf.json 中的版本 $version 不一致" }
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: 测试
+        working-directory: src-tauri
+        run: cargo test --lib
+
+      - name: 打包
+        run: pnpm package
+
+      - name: 上传到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: VenvDock ${{ env.VERSION }}
+          files: |
+            release/VenvDock_*_x64-setup.exe
+            release/VenvDock_*_x64-portable.exe

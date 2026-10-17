@@ -2,7 +2,7 @@
 // 主页面：项目列表、添加/编辑/设置对话框、提示消息
 import { computed, onMounted, ref } from "vue";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { Boxes, Plus, Settings as SettingsIcon } from "@lucide/vue";
+import { Boxes, Play, Plus, Settings as SettingsIcon, Square } from "@lucide/vue";
 import { api, type Project } from "./api";
 import { errorText, init, notify, reload, state, toasts } from "./store";
 import ProjectCard from "./components/ProjectCard.vue";
@@ -10,6 +10,7 @@ import ProjectDialog from "./components/ProjectDialog.vue";
 import LogViewer from "./components/LogViewer.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
 import ThemeSwitcher from "./components/ThemeSwitcher.vue";
+import { autoCheckUpdate } from "./update";
 
 const projects = computed(() => state.config?.projects ?? []);
 const runningCount = computed(
@@ -28,6 +29,9 @@ onMounted(async () => {
   } catch (e) {
     loadError.value = errorText(e);
   }
+  // 每天最多自动检查一次更新，有新版本时提示
+  const update = await autoCheckUpdate();
+  if (update) notify(`发现新版本 v${update.latest}，可在“设置”中前往下载`);
 });
 
 async function onProjectSaved() {
@@ -39,6 +43,14 @@ async function onSettingsSaved() {
   showSettings.value = false;
   await reload();
   notify("设置已保存");
+}
+
+async function runAll(action: () => Promise<void>) {
+  try {
+    await action();
+  } catch (e) {
+    notify(errorText(e), "error");
+  }
 }
 
 async function remove(project: Project) {
@@ -73,6 +85,15 @@ async function remove(project: Project) {
         </div>
       </div>
       <div class="flex items-center gap-2">
+        <template v-if="projects.length">
+          <button class="icon-btn size-9" title="全部启动" @click="runAll(api.startAll)">
+            <Play class="size-[18px]" />
+          </button>
+          <button class="icon-btn size-9" title="全部停止" @click="runAll(api.stopAll)">
+            <Square class="size-[18px]" />
+          </button>
+          <span class="mx-1 h-5 w-px bg-line"></span>
+        </template>
         <ThemeSwitcher />
         <button class="icon-btn size-9" title="设置" :disabled="!state.config" @click="showSettings = true">
           <SettingsIcon class="size-[18px]" />

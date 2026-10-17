@@ -5,6 +5,8 @@ use tauri::{AppHandle, Manager};
 pub struct AppPaths {
     pub config_file: PathBuf,
     pub log_dir: PathBuf,
+    /// 程序自身的运行日志
+    pub app_log: PathBuf,
     /// WebView2 数据目录；None 表示使用默认位置（%LOCALAPPDATA%\com.venvdock.app）
     pub webview_dir: Option<PathBuf>,
 }
@@ -20,12 +22,15 @@ impl AppPaths {
             return Ok(Self {
                 config_file: dir.join("config.json"),
                 log_dir: dir.join("logs"),
+                app_log: dir.join("venvdock.log"),
                 webview_dir: Some(dir.join("webview")),
             });
         }
+        let data_dir = app.path().app_data_dir()?;
         Ok(Self {
             config_file: app.path().app_config_dir()?.join("config.json"),
-            log_dir: app.path().app_data_dir()?.join("logs"),
+            log_dir: data_dir.join("logs"),
+            app_log: data_dir.join("venvdock.log"),
             webview_dir: None,
         })
     }

@@ -30,19 +30,21 @@
 |---|---|
 | 🚀 **启停与重启** | 停止时先发送 Ctrl+C 让服务优雅退出，超时再强制结束整个进程树 |
 | 🧹 **不留孤儿进程** | 子进程全部放入 Job Object，VenvDock 退出或崩溃时一并回收 |
-| 🔁 **崩溃自动重启** | 指数退避（默认 3 秒起、上限 60 秒），连续快速失败超过次数后放弃并提示 |
-| 📜 **实时日志** | 界面内实时查看、筛选、按级别着色；按大小轮转写入文件；自动处理 GBK / UTF-8 混合输出 |
+| 🔁 **崩溃自动重启** | 指数退避（默认 3 秒起、上限 60 秒），连续快速失败超过次数后放弃并弹出系统通知 |
+| 🩺 **健康检查** | 可选：每 15 秒访问服务网址，服务响应过后连续 3 次无响应即结束进程并重启，处理“进程还在但已卡死” |
+| 📜 **实时日志** | 界面内实时查看、搜索、按级别筛选，显示 ANSI 颜色；按大小轮转写入文件；自动处理 GBK / UTF-8 混合输出 |
 | 🐍 **venv 支持** | 指定虚拟环境即等同于先激活它；可设置工作目录、日志目录、环境变量 |
-| 🖥️ **托盘常驻** | 开机自启（默认只在托盘）、单实例、关闭窗口即最小化到托盘 |
+| 🖥️ **托盘常驻** | 开机自启（默认只在托盘）、单实例、关闭窗口即最小化到托盘；托盘菜单可直接启停各项目或全部启停 |
+| 📦 **导入导出** | 导出配置、导入项目，方便换电脑；设置中可检查新版本 |
 | 🪶 **低占用** | 窗口关闭 30 秒后释放 WebView，后台常驻约 12 MB 内存；开机启动时不加载界面，约 4 MB |
-| 💼 **免安装版** | 解压即用，配置和日志都保存在程序旁的 `data` 文件夹 |
+| 💼 **免安装版** | 单个 exe 直接运行；需要便携时在 exe 旁建 `data` 文件夹即可 |
 
 ## 📦 安装
 
 从 [Releases](../../releases/latest) 下载：
 
 - **安装版** `VenvDock_x.y.z_x64-setup.exe`：按当前用户安装，无需管理员权限
-- **免安装版** `VenvDock_x.y.z_x64-portable.zip`：解压后运行 `VenvDock.exe`
+- **免安装版** `VenvDock_x.y.z_x64-portable.exe`：单个文件，放到任意位置直接运行
 
 > 依赖系统自带的 WebView2（Windows 10/11 均已预装）。
 
@@ -63,12 +65,16 @@
 
 ## 📁 文件位置
 
-| 内容 | 安装版 | 免安装版 |
+安装版和免安装版默认都保存在当前用户目录下：
+
+| 内容 | 默认位置 | 便携模式 |
 |---|---|---|
 | 配置 | `%APPDATA%\com.venvdock.app\config.json` | `data\config.json` |
 | 日志（默认） | `%APPDATA%\com.venvdock.app\logs\<项目名>.log` | `data\logs\<项目名>.log` |
+| 界面缓存 | `%LOCALAPPDATA%\com.venvdock.app` | `data\webview` |
+| 程序日志 | `%APPDATA%\com.venvdock.app\venvdock.log` | `data\venvdock.log` |
 
-> 程序所在目录存在 `data` 文件夹时即为便携模式。
+> 在 exe 所在目录新建 `data` 文件夹即进入便携模式，所有数据都写在其中。
 
 ## 🛠️ 开发
 
@@ -77,9 +83,10 @@
 ```bash
 pnpm install
 pnpm tauri dev                # 开发运行（开发版不会写入开机自启注册表项）
-pnpm tauri build              # 打包安装版，输出到 src-tauri/target/release/bundle/nsis/
-pnpm package:portable         # 再打包免安装版 zip，输出到 bundle/portable/
+pnpm package                  # 打包安装版和免安装版（单个 exe），统一输出到 release/
 ```
+
+发布：推送与 `tauri.conf.json` 版本一致的标签（如 `git tag v0.3.0 && git push origin v0.3.0`），GitHub Actions 会自动构建并上传到 Releases。
 
 ```text
 src/                  前端（Vue 3 + Tailwind CSS 4）
@@ -87,11 +94,15 @@ src-tauri/src/
 ├─ config/            配置模型与原子存储
 ├─ runtime/
 │  ├─ runner.rs       单个进程：启动、输出采集、优雅停止
-│  ├─ supervisor.rs   状态机与退避重启
+│  ├─ supervisor.rs   状态机、退避重启、健康检查
+│  ├─ health.rs       健康检查的 HTTP 探测
 │  ├─ loghub.rs       实时日志推送
 │  ├─ logs.rs         行切分、编码处理、日志轮转
 │  └─ win.rs          Win32 封装（Job Object、Ctrl+C 等）
 ├─ window.rs          主窗口按需创建、隐藏后销毁
+├─ tray.rs            托盘菜单
+├─ notify.rs          失败时的系统通知
+├─ applog.rs          程序自身的运行日志
 ├─ paths.rs           数据目录（安装版 / 便携版）
 └─ commands.rs        前端调用的命令
 ```

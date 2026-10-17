@@ -1,4 +1,5 @@
 //! 主窗口：按需创建；关闭后先隐藏，一段时间内未再打开则销毁窗口和 WebView 以释放内存
+use crate::applog;
 use crate::config::ConfigStore;
 use crate::paths::AppPaths;
 use crate::runtime::Supervisor;
@@ -6,6 +7,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, Theme, WebviewWindowBuilder, Window};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_opener::OpenerExt;
+
+const WEBVIEW2_URL: &str = "https://developer.microsoft.com/microsoft-edge/webview2/";
 
 const MAIN: &str = "main";
 
@@ -25,8 +30,31 @@ pub fn show(app: &AppHandle) {
         return;
     }
     if let Err(e) = create(app) {
-        eprintln!("创建主窗口失败：{e}");
+        applog::write(&format!("创建主窗口失败：{e}"));
+        report_create_failure(app, &e);
     }
+}
+
+/// 窗口创建失败多半是缺少 WebView2 运行时；弹出系统对话框说明，不然用户只看到一个托盘图标
+fn report_create_failure(app: &AppHandle, error: &str) {
+    let opener = app.clone();
+    app.dialog()
+        .message(format!(
+            "无法打开主窗口：{error}
+
+通常是系统缺少 Microsoft Edge WebView2 运行时，安装后重新打开 VenvDock 即可。"
+        ))
+        .title("VenvDock")
+        .kind(MessageDialogKind::Error)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "打开下载页面".into(),
+            "关闭".into(),
+        ))
+        .show(move |ok| {
+            if ok {
+                let _ = opener.opener().open_url(WEBVIEW2_URL, None::<&str>);
+            }
+        });
 }
 
 /// 按 tauri.conf.json 中的窗口配置创建主窗口

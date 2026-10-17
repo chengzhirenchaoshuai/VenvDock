@@ -47,6 +47,30 @@ pub fn update_settings(
     Ok(saved)
 }
 
+/// 导入结果：新增和覆盖的项目数
+#[derive(serde::Serialize)]
+pub struct ImportSummary {
+    added: usize,
+    updated: usize,
+}
+
+#[tauri::command]
+pub fn export_config(store: State<'_, ConfigStore>, path: String) -> Result<(), String> {
+    store.export(std::path::Path::new(&path))
+}
+
+/// 导入项目；运行中的项目被覆盖后，新配置在下次启动时生效
+#[tauri::command]
+pub fn import_config(
+    app: AppHandle,
+    store: State<'_, ConfigStore>,
+    path: String,
+) -> Result<ImportSummary, String> {
+    let (added, updated) = store.import(std::path::Path::new(&path))?;
+    let _ = app.emit(CONFIG_EVENT, ());
+    Ok(ImportSummary { added, updated })
+}
+
 /// 在资源管理器中定位配置文件
 #[tauri::command]
 pub fn reveal_config_file(app: AppHandle, store: State<'_, ConfigStore>) -> Result<(), String> {
@@ -105,6 +129,16 @@ pub fn start_project(supervisor: State<'_, Supervisor>, id: String) -> Result<()
 #[tauri::command]
 pub fn stop_project(supervisor: State<'_, Supervisor>, id: String) {
     supervisor.stop(&id);
+}
+
+#[tauri::command]
+pub fn start_all(supervisor: State<'_, Supervisor>) {
+    supervisor.start_all();
+}
+
+#[tauri::command]
+pub fn stop_all(supervisor: State<'_, Supervisor>) {
+    supervisor.stop_all();
 }
 
 #[tauri::command]

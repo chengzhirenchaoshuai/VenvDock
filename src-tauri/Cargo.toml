@@ -1,6 +1,6 @@
 [package]
 name = "venvdock"
-version = "0.2.0"
+version = "0.3.0"
 description = "本地服务托管面板"
 authors = []
 edition = "2024"
@@ -23,8 +23,9 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1.28.0", features = ["v4"] }
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Console", "Win32_Globalization", "Win32_System_SystemInformation"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Console", "Win32_Globalization", "Win32_System_SystemInformation", "Win32_System_Registry"] }
 tauri-plugin-dialog = "2"
+tauri-winrt-notification = "0.8.1"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -32,8 +33,8 @@ tauri-plugin-dialog = "2"
 codegen-units = 1
 lto = true
 opt-level = 3
-panic = "abort"
 strip = true
+# 不设 panic = "abort"：后台线程出错只结束该线程，不会让程序退出、连带结束所有托管的服务
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

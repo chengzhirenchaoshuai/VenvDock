@@ -1,9 +1,13 @@
 <script setup lang="ts">
 // 全局设置
-import { ref } from "vue";
-import { FileCog } from "@lucide/vue";
+import { onMounted, ref } from "vue";
+import { getVersion } from "@tauri-apps/api/app";
+import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { Download, FileCog, RefreshCw, Upload } from "@lucide/vue";
 import { api, type Settings } from "../api";
-import { errorText, notify } from "../store";
+import { errorText, notify, reload } from "../store";
+import { checkUpdate, type UpdateInfo } from "../update";
 import Modal from "./Modal.vue";
 import Toggle from "./Toggle.vue";
 
@@ -38,6 +42,48 @@ async function save() {
   }
 }
 
+const JSON_FILTER = [{ name: "VenvDock 配置", extensions: ["json"] }];
+
+async function exportConfig() {
+  const path = await saveDialog({ defaultPath: "venvdock-config.json", filters: JSON_FILTER });
+  if (!path) return;
+  try {
+    await api.exportConfig(path);
+    notify("配置已导出");
+  } catch (e) {
+    notify(errorText(e), "error");
+  }
+}
+
+/** 导入只影响项目列表，不改动当前表单中的设置 */
+async function importConfig() {
+  const path = await open({ filters: JSON_FILTER });
+  if (!path) return;
+  try {
+    const { added, updated } = await api.importConfig(path);
+    await reload();
+    notify(`导入完成：新增 ${added} 个项目，覆盖 ${updated} 个`);
+  } catch (e) {
+    notify(errorText(e), "error");
+  }
+}
+
+const version = ref("");
+const update = ref<UpdateInfo | null>(null);
+const checking = ref(false);
+onMounted(async () => (version.value = await getVersion()));
+
+async function check() {
+  checking.value = true;
+  try {
+    update.value = await checkUpdate();
+  } catch (e) {
+    notify(errorText(e), "error");
+  } finally {
+    checking.value = false;
+  }
+}
+
 async function revealConfig() {
   try {
     await api.revealConfigFile();
@@ -53,6 +99,7 @@ async function revealConfig() {
       <section class="divide-y divide-line rounded-ctl border border-line px-4">
         <Toggle v-model="form.launchOnBoot" label="开机自动启动" description="登录 Windows 后在托盘中运行 VenvDock" />
         <Toggle v-model="form.showWindowOnStart" label="开机启动时显示主窗口" description="关闭则开机后只在托盘中运行；手动打开时总会显示" />
+        <Toggle v-model="form.notifyOnFailure" label="失败时通知" description="项目异常退出或放弃自动重启时，弹出 Windows 通知" />
       </section>
 
       <section class="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -64,6 +111,31 @@ async function revealConfig() {
           </div>
           <span v-if="f.hint" class="mt-1 block text-xs text-muted">{{ f.hint }}</span>
         </label>
+      </section>
+
+      <section class="space-y-2 rounded-ctl border border-line px-4 py-3">
+        <div class="flex items-center gap-2">
+          <span class="mr-auto text-sm font-medium">配置</span>
+          <button type="button" class="btn-secondary py-1.5" @click="importConfig">
+            <Download class="size-3.5" /> 导入项目
+          </button>
+          <button type="button" class="btn-secondary py-1.5" @click="exportConfig">
+            <Upload class="size-3.5" /> 导出配置
+          </button>
+        </div>
+        <p class="text-xs text-muted">导入时同一项目会被覆盖，其余作为新项目加入；不导入全局设置。可用于换电脑或从旧的便携版迁移。</p>
+      </section>
+
+      <section class="flex items-center gap-3 rounded-ctl border border-line px-4 py-3 text-sm">
+        <span class="font-medium">VenvDock {{ version && `v${version}` }}</span>
+        <span v-if="update && update.hasUpdate" class="text-accent">
+          发现新版本 v{{ update.latest }}
+          <button type="button" class="ml-1 underline" @click="openUrl(update.url)">前往下载</button>
+        </span>
+        <span v-else-if="update" class="text-muted">已是最新版本</span>
+        <button type="button" class="btn-secondary ml-auto py-1.5" :disabled="checking" @click="check">
+          <RefreshCw class="size-3.5" :class="{ 'animate-spin': checking }" /> 检查更新
+        </button>
       </section>
 
       <p v-if="error" class="rounded-ctl bg-fail/10 px-3 py-2 text-sm text-fail">

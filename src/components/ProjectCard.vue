@@ -63,6 +63,7 @@ const open = () => run(() => openUrl(link.value));
           <StatusBadge :phase="phase" />
           <span v-if="project.autoStart" class="text-xs text-faint">自动启动</span>
           <span v-if="project.autoRestart" class="text-xs text-faint">自动重启</span>
+          <span v-if="project.healthCheck" class="text-xs text-faint">健康检查</span>
         </div>
         <p class="mt-1 truncate font-mono text-xs text-muted select-text" :title="project.command">
           <span class="text-faint">$</span> {{ project.command }}

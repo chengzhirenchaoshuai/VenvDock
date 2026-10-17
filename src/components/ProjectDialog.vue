@@ -98,6 +98,11 @@ async function save() {
       <div class="divide-y divide-line rounded-ctl border border-line px-4">
         <Toggle v-model="form.autoStart" label="自动启动" description="VenvDock 启动时自动启动该项目" />
         <Toggle v-model="form.autoRestart" label="自动重启" description="非手动停止的退出后，按退避策略自动重新启动" />
+        <Toggle
+          v-model="form.healthCheck"
+          label="健康检查"
+          description="每 15 秒访问一次网址（未填写则用日志识别到的地址）；服务响应过后连续 3 次无响应，就结束进程并按退避策略重启"
+        />
       </div>
 
       <p v-if="error" class="rounded-ctl bg-fail/10 px-3 py-2 text-sm text-fail select-text">

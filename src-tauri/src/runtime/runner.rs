@@ -1,7 +1,7 @@
 //! 单个项目进程：启动、采集输出、优雅停止、强制结束
-use super::logs::{LineSplitter, LogWriter, decode_line, safe_filename};
+use super::logs::{LineSplitter, LogWriter, decode_line};
 use super::win::{self, Job};
-use crate::config::{Project, Settings};
+use crate::config::{Project, Settings, safe_filename};
 use std::ffi::OsString;
 use std::io::Read;
 use std::os::windows::io::AsRawHandle;
@@ -253,8 +253,7 @@ impl RunningProcess {
         });
     }
 
-    /// 立即结束整个进程树（目前仅测试使用）
-    #[allow(dead_code)]
+    /// 立即结束整个进程树
     pub fn kill(&self) {
         self.job.terminate();
     }

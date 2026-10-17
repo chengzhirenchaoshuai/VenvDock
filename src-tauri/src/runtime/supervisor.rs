@@ -1,4 +1,5 @@
 //! 监管器：维护每个项目的运行状态，处理启动、停止、重启以及崩溃后的退避重启
+use super::health;
 use super::loghub::LogHub;
 use super::logs::{detect_local_url, read_tail};
 use super::{LaunchSpec, RunningProcess};
@@ -14,6 +15,12 @@ use tauri::{AppHandle, Emitter, Manager};
 
 /// 运行超过该时长后退出，视为“稳定运行过”，重启计数从头开始
 const STABLE_RUN: Duration = Duration::from_secs(30);
+
+/// 健康检查间隔
+const HEALTH_INTERVAL: Duration = Duration::from_secs(15);
+
+/// 服务起来后连续多少次无响应判定为卡死
+const HEALTH_MAX_FAILURES: u32 = 3;
 
 /// 状态变化时推送给前端的事件名
 pub const STATUS_EVENT: &str = "project-status";
@@ -71,6 +78,10 @@ struct Slot {
     started: Option<Instant>,
     stop_requested: bool,
     restart_after_stop: bool,
+    /// 本次运行写入的日志文件；运行中改名后配置算出的路径会变，查看日志仍要用这个
+    log_file: Option<PathBuf>,
+    /// 由本程序主动结束进程的原因（如健康检查失败），退出后据此按自动重启处理
+    kill_reason: Option<String>,
 }
 
 impl Slot {
@@ -82,6 +93,8 @@ impl Slot {
             started: None,
             stop_requested: false,
             restart_after_stop: false,
+            log_file: None,
+            kill_reason: None,
         }
     }
 }
@@ -141,6 +154,13 @@ impl Supervisor {
         let _ = self.0.app.emit(STATUS_EVENT, status);
     }
 
+    /// 项目进入失败状态时发系统通知
+    fn notify_failed(&self, id: &str, message: &str) {
+        if let Some(project) = self.store().project(id) {
+            crate::notify::project_failed(&self.0.app, &project.name, message);
+        }
+    }
+
     /// 所有项目的当前状态，顺序与配置一致
     pub fn statuses(&self) -> Vec<ProjectStatus> {
         let projects = self.store().snapshot().projects;
@@ -155,8 +175,16 @@ impl Supervisor {
             .collect()
     }
 
-    /// 项目当前的日志文件路径
+    /// 项目当前的日志文件路径：进程在运行时用它实际写入的文件，否则按最新配置计算
     pub fn log_file(&self, id: &str) -> Option<PathBuf> {
+        if let Some(path) = self
+            .lock()
+            .get(id)
+            .filter(|slot| slot.process.is_some())
+            .and_then(|slot| slot.log_file.clone())
+        {
+            return Some(path);
+        }
         let store = self.store();
         let project = store.project(id)?;
         Some(LaunchSpec::new(&project, &store.settings(), &self.0.log_dir).log_file)
@@ -185,6 +213,20 @@ impl Supervisor {
         {
             // 失败信息已记录在该项目的状态中
             let _ = self.start(&project.id);
+        }
+    }
+
+    /// 启动全部项目（已在运行的不受影响）
+    pub fn start_all(&self) {
+        for project in self.store().snapshot().projects {
+            let _ = self.start(&project.id);
+        }
+    }
+
+    /// 停止全部项目
+    pub fn stop_all(&self) {
+        for project in self.store().snapshot().projects {
+            self.stop(&project.id);
         }
     }
 
@@ -293,6 +335,7 @@ impl Supervisor {
         let id = slot.status.id.clone();
         slot.stop_requested = false;
         slot.restart_after_stop = false;
+        slot.kill_reason = None;
         slot.status.next_restart_at = None;
         slot.status.detected_url = None;
         slot.generation += 1;
@@ -302,6 +345,7 @@ impl Supervisor {
             None => Err("项目不存在，可能已被删除".to_string()),
             Some(project) => {
                 let spec = LaunchSpec::new(&project, &store.settings(), &self.0.log_dir);
+                slot.log_file = Some(spec.log_file.clone());
                 let (sup, generation, exit_id) = (self.clone(), slot.generation, id.clone());
                 let (hub, line_id) = (self.0.hub.clone(), id.clone());
                 // 每次运行只识别第一个本机网址，之后不再逐行检查
@@ -322,8 +366,13 @@ impl Supervisor {
             }
         };
 
+        let health_check = store.project(&id).is_some_and(|p| p.health_check);
         let result = match result {
             Ok(process) => {
+                if health_check {
+                    let (sup, id, generation) = (self.clone(), id.clone(), slot.generation);
+                    thread::spawn(move || sup.health_loop(&id, generation));
+                }
                 slot.status.phase = Phase::Running;
                 slot.status.pid = Some(process.pid());
                 slot.status.started_at = Some(now_ms());
@@ -356,6 +405,7 @@ impl Supervisor {
         slot.status.started_at = None;
         slot.status.last_exit_code = code;
         let ran = slot.started.take().map(|t| t.elapsed()).unwrap_or_default();
+        let kill_reason = slot.kill_reason.take();
 
         // 手动停止或重启
         if slot.stop_requested {
@@ -371,17 +421,22 @@ impl Supervisor {
             return;
         }
 
-        // 意外退出：未开启自动重启时停在“已停止/失败”
+        // 意外退出：未开启自动重启时停在“已停止/失败”；健康检查结束的进程总是按自动重启处理
         let store = self.store();
         let settings = store.settings();
         let code_text = exit_code_text(code);
-        if !store.project(id).is_some_and(|p| p.auto_restart) {
+        let auto_restart =
+            kill_reason.is_some() || store.project(id).is_some_and(|p| p.auto_restart);
+        let exit_text = kill_reason.unwrap_or_else(|| format!("进程退出（退出码 {code_text}）"));
+        if !auto_restart {
             if code == Some(0) {
                 slot.status.phase = Phase::Stopped;
                 slot.status.message = None;
             } else {
+                let message = format!("进程异常退出（退出码 {code_text}）");
+                self.notify_failed(id, &message);
                 slot.status.phase = Phase::Failed;
-                slot.status.message = Some(format!("进程异常退出（退出码 {code_text}）"));
+                slot.status.message = Some(message);
             }
             self.emit(&slot.status);
             return;
@@ -395,11 +450,13 @@ impl Supervisor {
         };
         slot.status.restart_count = count;
         if settings.max_restart_attempts > 0 && count > settings.max_restart_attempts {
-            slot.status.phase = Phase::Failed;
-            slot.status.message = Some(format!(
-                "连续 {} 次启动后很快退出（退出码 {code_text}），已停止自动重启，请查看日志",
+            let message = format!(
+                "连续 {} 次启动后很快退出（{exit_text}），已停止自动重启，请查看日志",
                 settings.max_restart_attempts
-            ));
+            );
+            self.notify_failed(id, &message);
+            slot.status.phase = Phase::Failed;
+            slot.status.message = Some(message);
             self.emit(&slot.status);
             return;
         }
@@ -409,9 +466,7 @@ impl Supervisor {
         slot.generation += 1;
         slot.status.phase = Phase::Backoff;
         slot.status.next_restart_at = Some(now_ms() + delay * 1000);
-        slot.status.message = Some(format!(
-            "进程退出（退出码 {code_text}），即将第 {count} 次自动重启"
-        ));
+        slot.status.message = Some(format!("{exit_text}，即将第 {count} 次自动重启"));
         self.emit(&slot.status);
 
         let (sup, id, generation) = (self.clone(), id.to_string(), slot.generation);
@@ -429,6 +484,62 @@ impl Supervisor {
         // 等待期间被手动启动、停止或删除，则取消本次重启
         if slot.generation == generation && slot.status.phase == Phase::Backoff {
             let _ = self.launch(slot);
+        }
+    }
+
+    /// 健康检查线程：定时访问网址；服务第一次响应之前不计失败（启动慢的服务可能要加载很久），
+    /// 之后连续 HEALTH_MAX_FAILURES 次无响应就结束进程，交给退出回调按自动重启处理
+    fn health_loop(&self, id: &str, generation: u64) {
+        let mut responded = false;
+        let mut failures = 0;
+        loop {
+            thread::sleep(HEALTH_INTERVAL);
+            // 本次运行已结束或已被替换，则退出
+            let url = {
+                let slots = self.lock();
+                let Some(slot) = slots.get(id) else { return };
+                if slot.generation != generation || slot.status.phase != Phase::Running {
+                    return;
+                }
+                let configured = self.store().project(id).map(|p| p.url).unwrap_or_default();
+                if configured.is_empty() {
+                    slot.status.detected_url.clone()
+                } else {
+                    Some(configured)
+                }
+            };
+            // 还不知道网址（日志里尚未出现），下一轮再看
+            let Some(url) = url else { continue };
+            let ok = health::probe(&url);
+            if !ok && !responded {
+                continue;
+            }
+
+            let mut slots = self.lock();
+            let Some(slot) = slots.get_mut(id) else { return };
+            if slot.generation != generation || slot.status.phase != Phase::Running {
+                return;
+            }
+            if ok {
+                responded = true;
+                if failures > 0 {
+                    failures = 0;
+                    slot.status.message = None;
+                    self.emit(&slot.status);
+                }
+                continue;
+            }
+            failures += 1;
+            if failures < HEALTH_MAX_FAILURES {
+                slot.status.message = Some(format!("网址无响应（第 {failures} 次）：{url}"));
+                self.emit(&slot.status);
+                continue;
+            }
+            slot.kill_reason = Some(format!("网址连续 {failures} 次无响应"));
+            if let Some(process) = &slot.process {
+                process.kill();
+            }
+            return;
         }
     }
 }

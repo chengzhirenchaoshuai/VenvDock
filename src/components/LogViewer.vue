@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { ArrowDownToLine, Eraser, FolderOpen, Search, X } from "@lucide/vue";
 import { api, type Project } from "../api";
+import { parseAnsi, type Span } from "../ansi";
 import { errorText, notify, state } from "../store";
 import StatusBadge from "./StatusBadge.vue";
 
@@ -13,19 +14,46 @@ const emit = defineEmits<{ close: [] }>();
 /** 界面中最多保留的行数，超出丢弃最旧的 */
 const MAX_LINES = 5000;
 
-const lines = shallowRef<string[]>([]);
+/** 日志级别：0 普通、1 警告、2 错误 */
+type Level = 0 | 1 | 2;
+
+/** 一行日志；id 递增且不复用，丢弃旧行时其余行的 key 不变，Vue 只需增删首尾节点 */
+interface Line {
+  id: number;
+  /** 去掉控制符后的文本，用于筛选和搜索 */
+  text: string;
+  /** 带 ANSI 颜色的片段；没有颜色时为 null，按内容着色 */
+  spans: Span[] | null;
+  level: Level;
+  cls: string;
+}
+
+const lines = shallowRef<Line[]>([]);
+let lineSeq = 0;
 const query = ref("");
+/** 只显示该级别及以上的行 */
+const minLevel = ref<Level>(0);
 const autoScroll = ref(true);
 const box = ref<HTMLElement>();
 let unlisten: UnlistenFn | undefined;
 
 const phase = computed(() => state.statuses[props.project.id]?.phase ?? "stopped");
 
-/** 去掉 ANSI 颜色控制符 */
-const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+const ERROR_RE = /\b(error|exception|traceback|critical|fatal)\b|错误|失败/i;
+const WARN_RE = /\bwarn(ing)?\b|警告/i;
+
+/** 解析一行：去掉控制符、识别级别；级别和颜色在追加时算好，渲染时不再重复计算 */
+function toLine(raw: string): Line {
+  const { text, spans } = parseAnsi(raw);
+  const level: Level = ERROR_RE.test(text) ? 2 : WARN_RE.test(text) ? 1 : 0;
+  const cls = text.startsWith("==========")
+    ? "text-log-marker"
+    : ["text-log-fg", "text-log-warn", "text-log-error"][level];
+  return { id: ++lineSeq, text, spans, level, cls };
+}
 
 function append(newLines: string[]) {
-  const merged = lines.value.concat(newLines.map(stripAnsi));
+  const merged = lines.value.concat(newLines.map(toLine));
   lines.value = merged.length > MAX_LINES ? merged.slice(merged.length - MAX_LINES) : merged;
   if (autoScroll.value) nextTick(scrollToBottom);
 }
@@ -43,7 +71,9 @@ function onScroll() {
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase();
-  return q ? lines.value.filter((l) => l.toLowerCase().includes(q)) : lines.value;
+  const min = minLevel.value;
+  if (!q && !min) return lines.value;
+  return lines.value.filter((l) => l.level >= min && (!q || l.text.toLowerCase().includes(q)));
 });
 
 /** 把一行按搜索词拆成普通片段和高亮片段 */
@@ -61,14 +91,6 @@ function segments(line: string): { text: string; hit: boolean }[] {
   }
   if (pos < line.length) parts.push({ text: line.slice(pos), hit: false });
   return parts;
-}
-
-/** 按内容给行着色：分隔行、错误、警告 */
-function lineClass(line: string): string {
-  if (line.startsWith("==========")) return "text-indigo-300";
-  if (/\b(error|exception|traceback|critical|fatal)\b|错误|失败/i.test(line)) return "text-rose-300";
-  if (/\bwarn(ing)?\b|警告/i.test(line)) return "text-amber-300";
-  return "text-zinc-300";
 }
 
 async function revealLog() {
@@ -105,17 +127,26 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="fixed inset-0 z-40 flex justify-end bg-black/40" @mousedown.self="emit('close')">
-    <section class="flex h-full w-[min(1100px,94vw)] flex-col bg-log-bg text-zinc-100 shadow-2xl">
-      <header class="flex items-center gap-3 border-b border-zinc-800 px-5 py-3">
+    <section class="flex h-full w-[min(1100px,94vw)] flex-col bg-log-bg text-log-strong shadow-2xl">
+      <header class="flex items-center gap-3 border-b border-log-line px-5 py-3">
         <h2 class="truncate text-sm font-semibold">{{ project.name }}</h2>
         <StatusBadge :phase="phase" />
-        <span class="text-xs text-zinc-500">{{ lines.length }} 行</span>
+        <span class="text-xs text-log-muted">{{ lines.length }} 行</span>
 
-        <div class="relative ml-auto w-64">
-          <Search class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-zinc-500" />
+        <select
+          v-model.number="minLevel"
+          class="ml-auto rounded-lg border border-log-line bg-log-panel px-2 py-1.5 text-xs text-log-fg outline-none focus:border-accent"
+          title="按级别筛选"
+        >
+          <option :value="0">全部级别</option>
+          <option :value="1">警告及错误</option>
+          <option :value="2">仅错误</option>
+        </select>
+        <div class="relative w-64">
+          <Search class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-log-muted" />
           <input
             v-model="query"
-            class="w-full rounded-lg border border-zinc-800 bg-zinc-900 py-1.5 pr-3 pl-8 text-xs outline-none placeholder:text-zinc-500 focus:border-accent"
+            class="w-full rounded-lg border border-log-line bg-log-panel py-1.5 pr-3 pl-8 text-xs outline-none placeholder:text-log-muted focus:border-accent"
             placeholder="筛选日志"
             spellcheck="false"
           />
@@ -133,13 +164,19 @@ onBeforeUnmount(() => {
 
       <div class="relative min-h-0 flex-1">
         <div ref="box" class="h-full overflow-y-auto px-5 py-3 font-mono text-xs leading-5 select-text" @scroll="onScroll">
-          <p v-if="!filtered.length" class="text-zinc-500">
+          <p v-if="!filtered.length" class="text-log-muted">
             {{ lines.length ? "没有匹配的行" : "暂无日志，启动项目后这里会实时显示输出。" }}
           </p>
-          <div v-for="(line, i) in filtered" :key="i" class="break-all whitespace-pre-wrap" :class="lineClass(line)">
-            <template v-for="(seg, j) in segments(line)" :key="j">
-              <mark v-if="seg.hit" class="rounded-sm bg-amber-400/80 text-zinc-950">{{ seg.text }}</mark>
-              <template v-else>{{ seg.text }}</template>
+          <div v-for="line in filtered" :key="line.id" class="break-all whitespace-pre-wrap" :class="line.cls">
+            <!-- 搜索时显示高亮，暂不保留颜色 -->
+            <template v-if="query.trim() || !line.spans">
+              <template v-for="(seg, j) in segments(line.text)" :key="j">
+                <mark v-if="seg.hit" class="rounded-sm bg-log-hit text-log-bg">{{ seg.text }}</mark>
+                <template v-else>{{ seg.text }}</template>
+              </template>
+            </template>
+            <template v-else>
+              <span v-for="(span, j) in line.spans" :key="j" :style="span.style">{{ span.text }}</span>
             </template>
           </div>
         </div>
@@ -158,6 +195,6 @@ onBeforeUnmount(() => {
 <style scoped>
 @reference "../style.css";
 .log-btn {
-  @apply inline-flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100;
+  @apply inline-flex size-8 items-center justify-center rounded-lg text-log-dim transition hover:bg-log-line hover:text-log-strong;
 }
 </style>

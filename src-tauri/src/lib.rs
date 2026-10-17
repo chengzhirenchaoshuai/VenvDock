@@ -1,5 +1,7 @@
+mod applog;
 mod commands;
 mod config;
+mod notify;
 mod paths;
 mod runtime;
 mod tray;
@@ -30,7 +32,7 @@ pub(crate) fn sync_autostart(app: &AppHandle, enabled: bool) {
         (false, false) => Ok(()),
     };
     if let Err(e) = result {
-        eprintln!("设置开机自启失败：{e}");
+        applog::write(&format!("设置开机自启失败：{e}"));
     }
 }
 
@@ -67,6 +69,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let paths = AppPaths::resolve(app.handle())?;
+            applog::init(&paths.app_log);
+            applog::write(&format!("VenvDock {} 启动", app.package_info().version));
             let store = ConfigStore::load(paths.config_file.clone());
             let settings = store.settings();
             let supervisor = Supervisor::new(app.handle().clone(), paths.log_dir.clone());
@@ -74,6 +78,7 @@ pub fn run() {
             app.manage(store);
             sync_autostart(app.handle(), settings.launch_on_boot);
             app.manage(supervisor.clone());
+            notify::register(app.handle());
             tray::setup(app.handle())?;
             supervisor.start_auto_projects();
             // 手动打开时总是显示窗口；开机自启时按设置决定，默认只在托盘（不创建 WebView）
@@ -89,6 +94,8 @@ pub fn run() {
             commands::delete_project,
             commands::update_settings,
             commands::reveal_config_file,
+            commands::export_config,
+            commands::import_config,
             commands::get_statuses,
             commands::reveal_log,
             commands::open_log,
@@ -96,6 +103,8 @@ pub fn run() {
             commands::start_project,
             commands::stop_project,
             commands::restart_project,
+            commands::start_all,
+            commands::stop_all,
         ])
         // 点击关闭按钮时只隐藏到托盘，真正退出走托盘菜单
         .on_window_event(|win, event| {

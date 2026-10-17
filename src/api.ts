@@ -21,6 +21,8 @@ export interface Project {
   autoRestart: boolean;
   /** 网页地址（可选），为空时使用从日志识别到的地址 */
   url: string;
+  /** 定时访问网址，服务起来后连续无响应则结束进程并重启 */
+  healthCheck: boolean;
 }
 
 export interface Settings {
@@ -34,6 +36,8 @@ export interface Settings {
   logKeepFiles: number;
   theme: Skin;
   appearance: Appearance;
+  /** 项目失败时弹出系统通知 */
+  notifyOnFailure: boolean;
 }
 
 export interface Config {
@@ -78,6 +82,7 @@ export function emptyProject(): Project {
     autoStart: false,
     autoRestart: true,
     url: "",
+    healthCheck: false,
   };
 }
 
@@ -87,6 +92,9 @@ export const api = {
   deleteProject: (id: string) => invoke<void>("delete_project", { id }),
   updateSettings: (settings: Settings) => invoke<Settings>("update_settings", { settings }),
   revealConfigFile: () => invoke<void>("reveal_config_file"),
+  exportConfig: (path: string) => invoke<void>("export_config", { path }),
+  /** 导入项目，返回新增和覆盖的数量 */
+  importConfig: (path: string) => invoke<{ added: number; updated: number }>("import_config", { path }),
   revealLog: (id: string) => invoke<void>("reveal_log", { id }),
   /** 开始实时查看日志，返回最近的行；之后的新行通过 onLog 推送 */
   openLog: (id: string) => invoke<string[]>("open_log", { id }),
@@ -97,6 +105,8 @@ export const api = {
   startProject: (id: string) => invoke<void>("start_project", { id }),
   stopProject: (id: string) => invoke<void>("stop_project", { id }),
   restartProject: (id: string) => invoke<void>("restart_project", { id }),
+  startAll: () => invoke<void>("start_all"),
+  stopAll: () => invoke<void>("stop_all"),
   /** 订阅状态变化推送，返回取消订阅函数 */
   onStatus: (handler: (status: ProjectStatus) => void): Promise<UnlistenFn> =>
     listen<ProjectStatus>("project-status", (event) => handler(event.payload)),

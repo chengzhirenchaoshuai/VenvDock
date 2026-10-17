@@ -1,13 +1,13 @@
-//! 托盘：双击显示主窗口；右键菜单列出运行中服务的“打开网页”，以及显示主窗口和退出
+//! 托盘：双击显示主窗口；右键菜单按项目列出子菜单（打开网页、启停、重启），以及全部启停、显示主窗口和退出
 use crate::config::ConfigStore;
-use crate::runtime::{Phase, STATUS_EVENT, Supervisor};
+use crate::runtime::{Phase, ProjectStatus, STATUS_EVENT, Supervisor};
 use crate::window;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use tauri::{
     AppHandle, Listener, Manager, Wry,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
 };
 use tauri_plugin_opener::OpenerExt;
@@ -17,8 +17,11 @@ const TRAY_ID: &str = "main";
 /// 项目配置变化（新增、修改、删除）时发出的事件，用于刷新托盘菜单
 pub const CONFIG_EVENT: &str = "config-changed";
 
-/// 菜单项 id 前缀：open:<项目 id>
-const OPEN_PREFIX: &str = "open:";
+/// 项目菜单项的 id 形如 “动作:项目 id”
+const OPEN: &str = "open";
+const START: &str = "start";
+const STOP: &str = "stop";
+const RESTART: &str = "restart";
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
@@ -33,12 +36,24 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => window::show(app),
             "quit" => crate::quit_app(app),
+            "start-all" => app.state::<Supervisor>().start_all(),
+            "stop-all" => app.state::<Supervisor>().stop_all(),
             id => {
-                if let Some(url) = id
-                    .strip_prefix(OPEN_PREFIX)
-                    .and_then(|pid| project_url(app, pid))
-                {
-                    let _ = app.opener().open_url(url, None::<&str>);
+                let Some((action, pid)) = id.split_once(':') else {
+                    return;
+                };
+                let supervisor = app.state::<Supervisor>();
+                match action {
+                    OPEN => {
+                        if let Some(url) = project_url(app, pid) {
+                            let _ = app.opener().open_url(url, None::<&str>);
+                        }
+                    }
+                    // 失败原因会显示在项目状态里
+                    START => drop(supervisor.start(pid)),
+                    STOP => supervisor.stop(pid),
+                    RESTART => drop(supervisor.restart(pid)),
+                    _ => {}
                 }
             }
         })
@@ -83,42 +98,71 @@ fn project_url(app: &AppHandle, id: &str) -> Option<String> {
         .statuses()
         .into_iter()
         .find(|s| s.id == id)?;
+    running_url(&project.url, &status)
+}
+
+fn running_url(configured: &str, status: &ProjectStatus) -> Option<String> {
     if status.phase != Phase::Running {
         return None;
     }
-    if project.url.is_empty() {
-        status.detected_url
+    if configured.is_empty() {
+        status.detected_url.clone()
     } else {
-        Some(project.url)
+        Some(configured.to_string())
     }
+}
+
+fn phase_text(phase: Phase) -> &'static str {
+    match phase {
+        Phase::Stopped => "已停止",
+        Phase::Running => "运行中",
+        Phase::Stopping => "停止中",
+        Phase::Backoff => "等待重启",
+        Phase::Failed => "失败",
+    }
+}
+
+fn item(app: &AppHandle, id: String, text: &str, enabled: bool) -> tauri::Result<MenuItem<Wry>> {
+    MenuItem::with_id(app, id, text, enabled, None::<&str>)
 }
 
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let menu = Menu::new(app)?;
-    let mut has_links = false;
-    for project in app.state::<ConfigStore>().snapshot().projects {
-        if project_url(app, &project.id).is_some() {
-            let id = format!("{OPEN_PREFIX}{}", project.id);
-            menu.append(&MenuItem::with_id(
-                app,
-                id,
-                format!("打开 {}", project.name),
-                true,
-                None::<&str>,
-            )?)?;
-            has_links = true;
-        }
+    let projects = app.state::<ConfigStore>().snapshot().projects;
+    let statuses = app.state::<Supervisor>().statuses();
+    for project in &projects {
+        let id = &project.id;
+        // 两份快照分别获取，按 id 对应，避免中途配置变化时错位
+        let Some(status) = statuses.iter().find(|s| &s.id == id) else {
+            continue;
+        };
+        // 等待重启时也可以“停止”，用于取消重启
+        let active = matches!(status.phase, Phase::Running | Phase::Stopping | Phase::Backoff);
+        let url = running_url(&project.url, status);
+        let sub = Submenu::with_items(
+            app,
+            format!("{}（{}）", project.name, phase_text(status.phase)),
+            true,
+            &[
+                &item(app, format!("{OPEN}:{id}"), "打开网页", url.is_some())?,
+                &PredefinedMenuItem::separator(app)?,
+                &if active {
+                    item(app, format!("{STOP}:{id}"), "停止", status.phase != Phase::Stopping)?
+                } else {
+                    item(app, format!("{START}:{id}"), "启动", true)?
+                },
+                &item(app, format!("{RESTART}:{id}"), "重启", status.phase == Phase::Running)?,
+            ],
+        )?;
+        menu.append(&sub)?;
     }
-    if has_links {
+    if !projects.is_empty() {
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(&item(app, "start-all".into(), "全部启动", true)?)?;
+        menu.append(&item(app, "stop-all".into(), "全部停止", true)?)?;
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
-    menu.append(&MenuItem::with_id(
-        app,
-        "show",
-        "显示主窗口",
-        true,
-        None::<&str>,
-    )?)?;
-    menu.append(&MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?)?;
+    menu.append(&item(app, "show".into(), "显示主窗口", true)?)?;
+    menu.append(&item(app, "quit".into(), "退出", true)?)?;
     Ok(menu)
 }

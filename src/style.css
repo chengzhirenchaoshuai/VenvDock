@@ -22,6 +22,16 @@
   --color-warn: var(--vd-warn);
   --color-fail: var(--vd-fail);
   --color-log-bg: var(--vd-log-bg);
+  --color-log-strong: var(--vd-log-strong);
+  --color-log-fg: var(--vd-log-fg);
+  --color-log-dim: var(--vd-log-dim);
+  --color-log-muted: var(--vd-log-muted);
+  --color-log-line: var(--vd-log-line);
+  --color-log-panel: var(--vd-log-panel);
+  --color-log-marker: var(--vd-log-marker);
+  --color-log-error: var(--vd-log-error);
+  --color-log-warn: var(--vd-log-warn);
+  --color-log-hit: var(--vd-log-hit);
   --color-logo-fg: var(--vd-logo-fg);
   --radius-card: var(--vd-radius-card);
   --radius-ctl: var(--vd-radius-ctl);
@@ -47,6 +57,17 @@
   --vd-warn: #b45309;
   --vd-fail: #be123c;
   --vd-log-bg: #09090b;
+  /* 日志区在所有主题下都是深色底，以下取值各主题共用 */
+  --vd-log-strong: #f4f4f5;
+  --vd-log-fg: #d4d4d8;
+  --vd-log-dim: #a1a1aa;
+  --vd-log-muted: #71717a;
+  --vd-log-line: #27272a;
+  --vd-log-panel: #18181b;
+  --vd-log-marker: #a5b4fc;
+  --vd-log-error: #fda4af;
+  --vd-log-warn: #fcd34d;
+  --vd-log-hit: rgb(251 191 36 / 0.8);
   --vd-logo-bg: linear-gradient(135deg, #6366f1, #7c3aed);
   --vd-logo-fg: #ffffff;
   --vd-radius-card: 12px;

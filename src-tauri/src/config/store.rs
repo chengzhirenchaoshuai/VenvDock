@@ -1,6 +1,7 @@
 use super::model::{CONFIG_VERSION, Config, Project, Settings};
 use std::collections::HashSet;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
@@ -21,7 +22,10 @@ fn write_atomic(path: &Path, config: &Config) -> Result<(), String> {
     }
     let data = serde_json::to_vec_pretty(config).map_err(|e| format!("序列化配置失败：{e}"))?;
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, data).map_err(|e| format!("写入配置失败：{e}"))?;
+    // 替换前先刷到磁盘：否则断电后可能留下空文件，加载时会被当成默认配置
+    File::create(&tmp)
+        .and_then(|mut f| f.write_all(&data).and_then(|_| f.sync_all()))
+        .map_err(|e| format!("写入配置失败：{e}"))?;
     fs::rename(&tmp, path).map_err(|e| format!("替换配置文件失败：{e}"))
 }
 
@@ -35,7 +39,7 @@ fn read_config(path: &Path) -> (Config, bool) {
         Ok(config) => config,
         Err(e) => {
             // 备份损坏的配置，避免之后保存时被覆盖而丢失
-            eprintln!("配置文件解析失败，已使用默认配置：{e}");
+            crate::applog::write(&format!("配置文件解析失败，已使用默认配置：{e}"));
             let _ = fs::copy(path, path.with_extension("json.bad"));
             return (Config::default(), false);
         }
@@ -63,7 +67,7 @@ impl ConfigStore {
     pub fn load(path: PathBuf) -> Self {
         let (config, dirty) = read_config(&path);
         if dirty && let Err(e) = write_atomic(&path, &config) {
-            eprintln!("回写修复后的配置失败：{e}");
+            crate::applog::write(&format!("回写修复后的配置失败：{e}"));
         }
         Self {
             path,
@@ -134,6 +138,54 @@ impl ConfigStore {
         })
     }
 
+    /// 把当前配置导出到指定文件
+    pub fn export(&self, path: &Path) -> Result<(), String> {
+        write_atomic(path, &self.snapshot())
+    }
+
+    /// 从配置文件导入项目（不导入全局设置）。
+    /// id 相同的项目覆盖现有配置，其余作为新项目加入，与现有项目重名时在名称后加序号；
+    /// 任何一个项目校验失败则整体不导入。返回（新增数，覆盖数）
+    pub fn import(&self, path: &Path) -> Result<(usize, usize), String> {
+        let text = fs::read_to_string(path).map_err(|e| format!("读取文件失败：{e}"))?;
+        let incoming: Config =
+            serde_json::from_str(&text).map_err(|e| format!("不是有效的 VenvDock 配置文件：{e}"))?;
+        self.mutate(|config| {
+            let (mut added, mut updated) = (0, 0);
+            for mut project in incoming.projects {
+                project.normalize();
+                let existing = config
+                    .projects
+                    .iter()
+                    .position(|p| !project.id.is_empty() && p.id == project.id);
+                if existing.is_none() {
+                    project.id = new_id();
+                    let base = project.name.clone();
+                    let mut n = 2;
+                    while config.projects.iter().any(|p| p.log_key() == project.log_key()) {
+                        project.name = format!("{base} ({n})");
+                        n += 1;
+                    }
+                }
+                let others = config.projects.iter().filter(|p| p.id != project.id);
+                project
+                    .validate(others)
+                    .map_err(|e| format!("项目“{}”：{e}", project.name))?;
+                match existing {
+                    Some(i) => {
+                        config.projects[i] = project;
+                        updated += 1;
+                    }
+                    None => {
+                        config.projects.push(project);
+                        added += 1;
+                    }
+                }
+            }
+            Ok((added, updated))
+        })
+    }
+
     pub fn update_settings(&self, settings: Settings) -> Result<Settings, String> {
         self.mutate(|config| {
             config.settings = settings.normalized();
@@ -171,6 +223,13 @@ mod tests {
             ..Default::default()
         };
         assert!(store.upsert_project(dup).is_err());
+        // 转换成日志文件名后相同（“a.” → a.log）也算重名
+        let same_log = Project {
+            name: "a.".into(),
+            command: "y".into(),
+            ..Default::default()
+        };
+        assert!(store.upsert_project(same_log).is_err());
         assert_eq!(store.snapshot().projects.len(), 3);
 
         // 新建成功后重新加载仍能读到
@@ -183,6 +242,21 @@ mod tests {
             .unwrap();
         assert_eq!(ConfigStore::load(path.clone()).snapshot().projects.len(), 4);
         store.delete_project(&created.id).unwrap();
+
+        // 导入：id 相同的覆盖；导入到另一份配置时作为新项目加入，重名自动加序号
+        let exported = dir.join("export.json");
+        store.export(&exported).unwrap();
+        assert_eq!(store.import(&exported).unwrap(), (0, 3));
+        let other = ConfigStore::load(dir.join("other.json"));
+        other
+            .upsert_project(Project {
+                name: "a".into(),
+                command: "y".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(other.import(&exported).unwrap(), (3, 0));
+        assert!(other.snapshot().projects.iter().any(|p| p.name == "a (2)"));
 
         // 损坏的配置被备份，并回退到默认配置
         fs::write(&path, "{坏的").unwrap();

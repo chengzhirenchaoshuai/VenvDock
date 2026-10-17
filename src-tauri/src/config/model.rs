@@ -33,6 +33,8 @@ pub struct Project {
     pub auto_restart: bool,
     /// 服务的网页地址（可选）；为空时从日志中自动识别
     pub url: String,
+    /// 定时访问网址，服务起来后连续无响应则结束进程并重启
+    pub health_check: bool,
 }
 
 /// 全局设置
@@ -59,6 +61,8 @@ pub struct Settings {
     pub theme: String,
     /// 外观：system（跟随系统）、light 或 dark
     pub appearance: String,
+    /// 项目失败（放弃重启或异常退出）时弹出系统通知
+    pub notify_on_failure: bool,
 }
 
 impl Default for Settings {
@@ -74,6 +78,7 @@ impl Default for Settings {
             log_keep_files: 5,
             theme: "default".into(),
             appearance: "system".into(),
+            notify_on_failure: true,
         }
     }
 }
@@ -119,6 +124,26 @@ impl Default for Config {
     }
 }
 
+/// 把项目名转换为合法的文件名
+pub fn safe_filename(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| {
+            if "<>:\"/\\|?*".contains(c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let cleaned = cleaned.trim_matches(|c| c == ' ' || c == '.');
+    if cleaned.is_empty() {
+        "project".into()
+    } else {
+        cleaned.into()
+    }
+}
+
 /// 规范化路径：去空白、统一为反斜杠、去掉末尾分隔符（保留盘符根目录如 C:\）
 fn normalize_path(text: &str) -> String {
     let replaced = text.trim().replace('/', "\\");
@@ -131,11 +156,8 @@ fn normalize_path(text: &str) -> String {
 }
 
 impl Project {
-    /// 规范化各字段并校验；`others` 为除自身外的其他项目，用于检查重名
-    pub fn normalize_and_validate<'a>(
-        &mut self,
-        others: impl IntoIterator<Item = &'a Project>,
-    ) -> Result<(), String> {
+    /// 规范化各字段：去空白、统一路径写法、去掉名称为空的环境变量
+    pub fn normalize(&mut self) {
         self.name = self.name.trim().to_string();
         self.command = self.command.trim().to_string();
         self.venv_path = normalize_path(&self.venv_path);
@@ -146,15 +168,30 @@ impl Project {
             var.key = var.key.trim().to_string();
         }
         self.env.retain(|var| !var.key.is_empty());
+    }
 
+    /// 规范化并完整校验（含路径是否存在）；`others` 为除自身外的其他项目，用于检查重名
+    pub fn normalize_and_validate<'a>(
+        &mut self,
+        others: impl IntoIterator<Item = &'a Project>,
+    ) -> Result<(), String> {
+        self.normalize();
+        self.validate(others)?;
+        self.validate_paths()
+    }
+
+    /// 名称转换后用作日志文件名（如“a:b”和“a_b”都是 a_b.log），Windows 文件名不区分大小写，重名按此比较
+    pub fn log_key(&self) -> String {
+        safe_filename(&self.name).to_lowercase()
+    }
+
+    /// 与路径无关的校验。导入配置时只做这部分：换电脑后路径可能暂时不存在，启动时会再提示
+    pub fn validate<'a>(&self, others: impl IntoIterator<Item = &'a Project>) -> Result<(), String> {
         if self.name.is_empty() {
             return Err("项目名称不能为空".into());
         }
-        // 名称会用作日志文件名，Windows 文件名不区分大小写，因此重名检查也不区分
-        if others
-            .into_iter()
-            .any(|p| p.name.eq_ignore_ascii_case(&self.name))
-        {
+        let key = self.log_key();
+        if others.into_iter().any(|p| p.log_key() == key) {
             return Err(format!("已存在名为“{}”的项目", self.name));
         }
         if !self.url.is_empty()
@@ -166,15 +203,6 @@ impl Project {
         if self.command.is_empty() {
             return Err("启动命令不能为空".into());
         }
-        if !self.venv_path.is_empty() && !Path::new(&self.venv_path).join("Scripts").is_dir() {
-            return Err(format!(
-                "venv 路径无效（缺少 Scripts 目录）：{}",
-                self.venv_path
-            ));
-        }
-        if !self.work_dir.is_empty() && !Path::new(&self.work_dir).is_dir() {
-            return Err(format!("工作目录不存在：{}", self.work_dir));
-        }
         for (i, var) in self.env.iter().enumerate() {
             if var.key.contains('=') {
                 return Err(format!("环境变量名不能包含“=”：{}", var.key));
@@ -185,6 +213,20 @@ impl Project {
             {
                 return Err(format!("环境变量重复：{}", var.key));
             }
+        }
+        Ok(())
+    }
+
+    /// 已填写的 venv 和工作目录必须存在
+    fn validate_paths(&self) -> Result<(), String> {
+        if !self.venv_path.is_empty() && !Path::new(&self.venv_path).join("Scripts").is_dir() {
+            return Err(format!(
+                "venv 路径无效（缺少 Scripts 目录）：{}",
+                self.venv_path
+            ));
+        }
+        if !self.work_dir.is_empty() && !Path::new(&self.work_dir).is_dir() {
+            return Err(format!("工作目录不存在：{}", self.work_dir));
         }
         Ok(())
     }
