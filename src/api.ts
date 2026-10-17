@@ -28,6 +28,8 @@ export interface Project {
 export interface Settings {
   launchOnBoot: boolean;
   showWindowOnStart: boolean;
+  /** 点击窗口关闭按钮时最小化到托盘，否则退出程序 */
+  closeToTray: boolean;
   stopTimeoutSecs: number;
   restartDelaySecs: number;
   restartMaxDelaySecs: number;
@@ -61,6 +63,8 @@ export interface ProjectStatus {
   message: string | null;
   /** 本次运行从日志识别到的本机网址 */
   detectedUrl: string | null;
+  /** 服务已可访问：配置了网址的项目要等网址能连上，否则启动即为 true */
+  ready: boolean;
 }
 
 /** 实时日志推送的一批行 */

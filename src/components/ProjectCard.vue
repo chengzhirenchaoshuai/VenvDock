@@ -18,7 +18,8 @@ const busy = ref(false);
 /** 网页地址：优先用配置的网址，否则用本次运行从日志识别到的；只在运行中可打开 */
 const link = computed(() => props.project.url || props.status?.detectedUrl || "");
 const linkDetected = computed(() => !props.project.url && !!props.status?.detectedUrl);
-const canOpen = computed(() => phase.value === "running" && !!link.value);
+const ready = computed(() => props.status?.ready ?? false);
+const canOpen = computed(() => phase.value === "running" && ready.value && !!link.value);
 
 /** 运行信息行：PID、运行时长、退出码、重启倒计时 */
 const details = computed(() => {
@@ -27,6 +28,7 @@ const details = computed(() => {
   if (!s) return items;
   if (s.pid !== null) items.push(`PID ${s.pid}`);
   if (s.startedAt !== null) items.push(`已运行 ${formatDuration(now.value - s.startedAt)}`);
+  if (s.phase === "running" && !s.ready) items.push("等待网址可访问…");
   if (s.nextRestartAt !== null) {
     items.push(`${Math.max(0, Math.ceil((s.nextRestartAt - now.value) / 1000))} 秒后重启`);
   }
@@ -60,7 +62,7 @@ const open = () => run(() => openUrl(link.value));
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2.5">
           <h3 class="truncate text-[15px] font-semibold">{{ project.name }}</h3>
-          <StatusBadge :phase="phase" />
+          <StatusBadge :phase="phase" :ready="ready" />
           <span v-if="project.autoStart" class="text-xs text-faint">自动启动</span>
           <span v-if="project.autoRestart" class="text-xs text-faint">自动重启</span>
           <span v-if="project.healthCheck" class="text-xs text-faint">健康检查</span>

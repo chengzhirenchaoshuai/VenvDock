@@ -45,6 +45,8 @@ pub struct Settings {
     pub launch_on_boot: bool,
     /// 启动时显示主窗口（否则只在托盘）
     pub show_window_on_start: bool,
+    /// 点击窗口关闭按钮时最小化到托盘；关闭此项则直接退出程序
+    pub close_to_tray: bool,
     /// 优雅停止的等待秒数，超时后强制结束
     pub stop_timeout_secs: u32,
     /// 自动重启的初始等待秒数，之后按指数退避
@@ -70,6 +72,7 @@ impl Default for Settings {
         Self {
             launch_on_boot: true,
             show_window_on_start: false,
+            close_to_tray: true,
             stop_timeout_secs: 10,
             restart_delay_secs: 3,
             restart_max_delay_secs: 60,

@@ -102,7 +102,7 @@ fn project_url(app: &AppHandle, id: &str) -> Option<String> {
 }
 
 fn running_url(configured: &str, status: &ProjectStatus) -> Option<String> {
-    if status.phase != Phase::Running {
+    if status.phase != Phase::Running || !status.ready {
         return None;
     }
     if configured.is_empty() {
@@ -112,9 +112,10 @@ fn running_url(configured: &str, status: &ProjectStatus) -> Option<String> {
     }
 }
 
-fn phase_text(phase: Phase) -> &'static str {
-    match phase {
+fn phase_text(status: &ProjectStatus) -> &'static str {
+    match status.phase {
         Phase::Stopped => "已停止",
+        Phase::Running if !status.ready => "启动中",
         Phase::Running => "运行中",
         Phase::Stopping => "停止中",
         Phase::Backoff => "等待重启",
@@ -141,7 +142,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         let url = running_url(&project.url, status);
         let sub = Submenu::with_items(
             app,
-            format!("{}（{}）", project.name, phase_text(status.phase)),
+            format!("{}（{}）", project.name, phase_text(status)),
             true,
             &[
                 &item(app, format!("{OPEN}:{id}"), "打开网页", url.is_some())?,

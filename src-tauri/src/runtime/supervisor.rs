@@ -22,6 +22,9 @@ const HEALTH_INTERVAL: Duration = Duration::from_secs(15);
 /// 服务起来后连续多少次无响应判定为卡死
 const HEALTH_MAX_FAILURES: u32 = 3;
 
+/// 等待网址可访问时的探测间隔
+const READY_POLL: Duration = Duration::from_secs(2);
+
 /// 状态变化时推送给前端的事件名
 pub const STATUS_EVENT: &str = "project-status";
 
@@ -52,6 +55,8 @@ pub struct ProjectStatus {
     pub message: Option<String>,
     /// 本次运行从日志中识别到的本机网址
     pub detected_url: Option<String>,
+    /// 服务已可访问：配置了网址的项目要等网址能连上；未配置网址的启动即视为就绪
+    pub ready: bool,
 }
 
 impl ProjectStatus {
@@ -66,6 +71,7 @@ impl ProjectStatus {
             next_restart_at: None,
             message: None,
             detected_url: None,
+            ready: false,
         }
     }
 }
@@ -366,7 +372,9 @@ impl Supervisor {
             }
         };
 
-        let health_check = store.project(&id).is_some_and(|p| p.health_check);
+        let (health_check, url) = store
+            .project(&id)
+            .map_or((false, String::new()), |p| (p.health_check, p.url));
         let result = match result {
             Ok(process) => {
                 if health_check {
@@ -377,6 +385,12 @@ impl Supervisor {
                 slot.status.pid = Some(process.pid());
                 slot.status.started_at = Some(now_ms());
                 slot.status.message = None;
+                // 配置了网址的项目要等网址能连上才算启动完成（加载慢的服务可能要几十秒）
+                slot.status.ready = url.is_empty();
+                if !url.is_empty() {
+                    let (sup, id, generation) = (self.clone(), id.clone(), slot.generation);
+                    thread::spawn(move || sup.ready_loop(&id, generation, &url));
+                }
                 slot.started = Some(Instant::now());
                 slot.process = Some(process);
                 Ok(())
@@ -403,12 +417,14 @@ impl Supervisor {
         slot.process = None;
         slot.status.pid = None;
         slot.status.started_at = None;
+        slot.status.ready = false;
         slot.status.last_exit_code = code;
         let ran = slot.started.take().map(|t| t.elapsed()).unwrap_or_default();
         let kill_reason = slot.kill_reason.take();
 
-        // 手动停止或重启
+        // 手动停止或重启：退出码来自本程序发出的 Ctrl+C 或强制结束，不显示，免得看起来像出错
         if slot.stop_requested {
+            slot.status.last_exit_code = None;
             if slot.restart_after_stop {
                 slot.status.restart_count = 0;
                 let _ = self.launch(slot);
@@ -484,6 +500,33 @@ impl Supervisor {
         // 等待期间被手动启动、停止或删除，则取消本次重启
         if slot.generation == generation && slot.status.phase == Phase::Backoff {
             let _ = self.launch(slot);
+        }
+    }
+
+    /// 等待网址可访问：每隔 READY_POLL 探测一次，连上后标记为就绪；本次运行结束则退出
+    fn ready_loop(&self, id: &str, generation: u64, url: &str) {
+        loop {
+            thread::sleep(READY_POLL);
+            let running = |slots: &HashMap<String, Slot>| {
+                slots
+                    .get(id)
+                    .is_some_and(|s| s.generation == generation && s.status.phase == Phase::Running)
+            };
+            if !running(&self.lock()) {
+                return;
+            }
+            if !health::probe(url) {
+                continue;
+            }
+            let mut slots = self.lock();
+            if !running(&slots) {
+                return;
+            }
+            if let Some(slot) = slots.get_mut(id) {
+                slot.status.ready = true;
+                self.emit(&slot.status);
+            }
+            return;
         }
     }
 

@@ -38,6 +38,7 @@ const box = ref<HTMLElement>();
 let unlisten: UnlistenFn | undefined;
 
 const phase = computed(() => state.statuses[props.project.id]?.phase ?? "stopped");
+const ready = computed(() => state.statuses[props.project.id]?.ready ?? false);
 
 const ERROR_RE = /\b(error|exception|traceback|critical|fatal)\b|错误|失败/i;
 const WARN_RE = /\bwarn(ing)?\b|警告/i;
@@ -130,7 +131,7 @@ onBeforeUnmount(() => {
     <section class="flex h-full w-[min(1100px,94vw)] flex-col bg-log-bg text-log-strong shadow-2xl">
       <header class="flex items-center gap-3 border-b border-log-line px-5 py-3">
         <h2 class="truncate text-sm font-semibold">{{ project.name }}</h2>
-        <StatusBadge :phase="phase" />
+        <StatusBadge :phase="phase" :ready="ready" />
         <span class="text-xs text-log-muted">{{ lines.length }} 行</span>
 
         <select

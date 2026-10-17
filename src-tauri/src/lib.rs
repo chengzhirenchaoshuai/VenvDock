@@ -106,11 +106,15 @@ pub fn run() {
             commands::start_all,
             commands::stop_all,
         ])
-        // 点击关闭按钮时只隐藏到托盘，真正退出走托盘菜单
+        // 点击关闭按钮：默认隐藏到托盘；设置中关闭“最小化到托盘”时按托盘“退出”处理（先停止所有项目）
         .on_window_event(|win, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                window::hide(win);
+                if win.state::<ConfigStore>().settings().close_to_tray {
+                    window::hide(win);
+                } else {
+                    quit_app(win.app_handle());
+                }
             }
         })
         .build(tauri::generate_context!())

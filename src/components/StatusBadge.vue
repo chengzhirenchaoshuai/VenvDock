@@ -1,11 +1,19 @@
 <script setup lang="ts">
-// 状态徽标：圆点 + 文字，运行中时圆点带呼吸动画
+// 状态徽标：圆点 + 文字，运行中和启动中时圆点带呼吸动画
 import { computed } from "vue";
 import type { Phase } from "../api";
 
-const props = defineProps<{ phase: Phase }>();
+/** ready 为 false 的运行中项目显示为“启动中”（进程已起来，网址还连不上） */
+const props = defineProps<{ phase: Phase; ready?: boolean }>();
 
-const STYLES: Record<Phase, { text: string; badge: string; dot: string }> = {
+type Shown = Phase | "starting";
+
+const STYLES: Record<Shown, { text: string; badge: string; dot: string }> = {
+  starting: {
+    text: "启动中",
+    badge: "bg-accent/10 text-accent ring-accent/25",
+    dot: "bg-accent",
+  },
   running: {
     text: "运行中",
     badge: "bg-ok/10 text-ok ring-ok/25",
@@ -33,7 +41,8 @@ const STYLES: Record<Phase, { text: string; badge: string; dot: string }> = {
   },
 };
 
-const style = computed(() => STYLES[props.phase]);
+const shown = computed<Shown>(() => (props.phase === "running" && props.ready === false ? "starting" : props.phase));
+const style = computed(() => STYLES[shown.value]);
 </script>
 
 <template>
@@ -43,7 +52,7 @@ const style = computed(() => STYLES[props.phase]);
   >
     <span class="relative flex size-1.5">
       <span
-        v-if="phase === 'running'"
+        v-if="shown === 'running' || shown === 'starting'"
         class="absolute inline-flex size-full animate-ping rounded-full opacity-60"
         :class="style.dot"
       ></span>

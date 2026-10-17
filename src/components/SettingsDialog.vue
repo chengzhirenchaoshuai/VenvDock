@@ -99,6 +99,7 @@ async function revealConfig() {
       <section class="divide-y divide-line rounded-ctl border border-line px-4">
         <Toggle v-model="form.launchOnBoot" label="开机自动启动" description="登录 Windows 后在托盘中运行 VenvDock" />
         <Toggle v-model="form.showWindowOnStart" label="开机启动时显示主窗口" description="关闭则开机后只在托盘中运行；手动打开时总会显示" />
+        <Toggle v-model="form.closeToTray" label="关闭时最小化到系统托盘" description="关闭此项则点击窗口关闭按钮会退出 VenvDock，并先停止所有项目" />
         <Toggle v-model="form.notifyOnFailure" label="失败时通知" description="项目异常退出或放弃自动重启时，弹出 Windows 通知" />
       </section>
 
