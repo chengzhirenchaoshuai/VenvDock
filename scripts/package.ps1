@@ -29,7 +29,8 @@ $setupOut = "$out\VenvDock_${version}_x64-setup.exe"
 Push-Location $root
 try {
   foreach ($f in $setupOut, $portable) {
-    pnpm tauri signer sign -p $password $f | Out-Null
+    # 用 --password=… 单个参数：空密码时 -p "" 的空参数在 CI 上会被丢掉
+    pnpm tauri signer sign "--password=$password" $f | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "签名失败：$f" }
     if (-not (Test-Path "$f.sig")) { throw "找不到 $f.sig" }
   }
