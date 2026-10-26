@@ -31,7 +31,7 @@ onMounted(async () => {
   }
   // 每天最多自动检查一次更新，有新版本时提示
   const update = await autoCheckUpdate();
-  if (update) notify(`发现新版本 v${update.latest}，可在“设置”中前往下载`);
+  if (update) notify(`发现新版本 v${update.latest}，可在“设置”中一键更新`);
 });
 
 async function onProjectSaved() {

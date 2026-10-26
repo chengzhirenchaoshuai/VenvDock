@@ -222,6 +222,15 @@ impl Supervisor {
         }
     }
 
+    /// 正在运行或等待自动重启的项目
+    pub fn active_ids(&self) -> Vec<String> {
+        self.lock()
+            .iter()
+            .filter(|(_, s)| matches!(s.status.phase, Phase::Running | Phase::Backoff))
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
     /// 启动全部项目（已在运行的不受影响）
     pub fn start_all(&self) {
         for project in self.store().snapshot().projects {

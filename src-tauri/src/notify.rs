@@ -1,4 +1,4 @@
-//! 系统通知：服务失败时弹出 Windows 通知，点击后打开主窗口
+//! 系统通知：服务失败、自动更新失败时弹出 Windows 通知，点击后打开主窗口
 use crate::applog;
 use crate::config::ConfigStore;
 use tauri::{AppHandle, Manager};
@@ -47,7 +47,26 @@ pub fn project_failed(app: &AppHandle, project_name: &str, message: &str) {
     if !app.state::<ConfigStore>().settings().notify_on_failure {
         return;
     }
-    let (app, title, body) = (app.clone(), format!("{project_name} 已停止运行"), message.to_string());
+    show(app, format!("{project_name} 已停止运行"), message.to_string());
+}
+
+/// 自动更新失败、助手重新打开了原有版本时提示（不受设置控制）
+pub fn update_failed(app: &AppHandle) {
+    let log = std::env::temp_dir().join("venvdock-update").join("update.log");
+    show(
+        app,
+        "VenvDock 更新失败".into(),
+        format!(
+            "仍在使用 v{}。可能是程序所在文件夹不能写入，详情见 {}",
+            app.package_info().version,
+            log.display()
+        ),
+    );
+}
+
+/// 在后台线程发送通知，不阻塞调用方
+fn show(app: &AppHandle, title: String, body: String) {
+    let app = app.clone();
     std::thread::spawn(move || {
         let handle = app.clone();
         let result = Toast::new(&app_id(&app))

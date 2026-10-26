@@ -131,6 +131,23 @@ pub fn stop_project(supervisor: State<'_, Supervisor>, id: String) {
     supervisor.stop(&id);
 }
 
+/// 自动更新：下载并校验新版本、启动更新助手，然后按正常流程退出（先停止所有项目）
+#[tauri::command]
+pub async fn install_update(
+    app: AppHandle,
+    version: String,
+    assets: Vec<crate::updater::ReleaseAsset>,
+) -> Result<(), String> {
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::updater::prepare(&handle, &version, &assets)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    crate::quit_app(&app);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn start_all(supervisor: State<'_, Supervisor>) {
     supervisor.start_all();

@@ -2,9 +2,9 @@
 // 全局设置
 import { onMounted, ref } from "vue";
 import { getVersion } from "@tauri-apps/api/app";
-import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { ask, open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Download, FileCog, RefreshCw, Upload } from "@lucide/vue";
+import { ArrowUpCircle, Download, FileCog, RefreshCw, Upload } from "@lucide/vue";
 import { api, type Settings } from "../api";
 import { errorText, notify, reload } from "../store";
 import { checkUpdate, type UpdateInfo } from "../update";
@@ -84,6 +84,28 @@ async function check() {
   }
 }
 
+const installing = ref(false);
+
+/** 一键更新：确认后下载并校验新版本，程序随即退出，由更新助手替换并重新启动 */
+async function installUpdate() {
+  const info = update.value;
+  if (!info) return;
+  const confirmed = await ask(
+    `将更新到 v${info.latest}。
+更新时会先停止所有正在运行的项目，VenvDock 重新启动后自动恢复这些项目。`,
+    { title: "更新 VenvDock", kind: "info", okLabel: "立即更新", cancelLabel: "取消" },
+  );
+  if (!confirmed) return;
+  installing.value = true;
+  try {
+    await api.installUpdate(info.latest, info.assets);
+    notify("更新已下载，VenvDock 即将重新启动");
+  } catch (e) {
+    installing.value = false;
+    notify(errorText(e), "error");
+  }
+}
+
 async function revealConfig() {
   try {
     await api.revealConfigFile();
@@ -131,10 +153,19 @@ async function revealConfig() {
         <span class="font-medium">VenvDock {{ version && `v${version}` }}</span>
         <span v-if="update && update.hasUpdate" class="text-accent">
           发现新版本 v{{ update.latest }}
-          <button type="button" class="ml-1 underline" @click="openUrl(update.url)">前往下载</button>
+          <button type="button" class="ml-1 underline" @click="openUrl(update.url)">查看更新内容</button>
         </span>
         <span v-else-if="update" class="text-muted">已是最新版本</span>
-        <button type="button" class="btn-secondary ml-auto py-1.5" :disabled="checking" @click="check">
+        <button
+          v-if="update && update.hasUpdate"
+          type="button"
+          class="btn-primary ml-auto py-1.5"
+          :disabled="installing"
+          @click="installUpdate"
+        >
+          <ArrowUpCircle class="size-3.5" /> {{ installing ? "正在下载…" : "立即更新" }}
+        </button>
+        <button v-else type="button" class="btn-secondary ml-auto py-1.5" :disabled="checking" @click="check">
           <RefreshCw class="size-3.5" :class="{ 'animate-spin': checking }" /> 检查更新
         </button>
       </section>

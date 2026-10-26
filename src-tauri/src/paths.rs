@@ -7,6 +7,8 @@ pub struct AppPaths {
     pub log_dir: PathBuf,
     /// 程序自身的运行日志
     pub app_log: PathBuf,
+    /// 自动更新前记录的运行中项目，新版本启动后恢复
+    pub resume_file: PathBuf,
     /// WebView2 数据目录；None 表示使用默认位置（%LOCALAPPDATA%\com.venvdock.app）
     pub webview_dir: Option<PathBuf>,
 }
@@ -23,12 +25,15 @@ impl AppPaths {
                 config_file: dir.join("config.json"),
                 log_dir: dir.join("logs"),
                 app_log: dir.join("venvdock.log"),
+                resume_file: dir.join("resume.json"),
                 webview_dir: Some(dir.join("webview")),
             });
         }
         let data_dir = app.path().app_data_dir()?;
+        let config_dir = app.path().app_config_dir()?;
         Ok(Self {
-            config_file: app.path().app_config_dir()?.join("config.json"),
+            config_file: config_dir.join("config.json"),
+            resume_file: config_dir.join("resume.json"),
             log_dir: data_dir.join("logs"),
             app_log: data_dir.join("venvdock.log"),
             webview_dir: None,

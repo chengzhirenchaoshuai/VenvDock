@@ -6,12 +6,19 @@ const REPO = "chengzhirenchaoshuai/VenvDock";
 const AUTO_INTERVAL = 24 * 3600 * 1000;
 const LAST_CHECK_KEY = "venvdock.lastUpdateCheck";
 
+/** 发布中的一个文件，与 Rust 端 updater::ReleaseAsset 对应 */
+export interface ReleaseAsset {
+  name: string;
+  url: string;
+}
+
 export interface UpdateInfo {
   current: string;
   latest: string;
   /** 发布页地址 */
   url: string;
   hasUpdate: boolean;
+  assets: ReleaseAsset[];
 }
 
 /** 比较 x.y.z 形式的版本号，a 比 b 新时返回 true */
@@ -33,9 +40,14 @@ export async function checkUpdate(): Promise<UpdateInfo> {
     }),
   ]);
   if (!res.ok) throw new Error(`查询最新版本失败（HTTP ${res.status}）`);
-  const release = (await res.json()) as { tag_name: string; html_url: string };
+  const release = (await res.json()) as {
+    tag_name: string;
+    html_url: string;
+    assets: { name: string; browser_download_url: string }[];
+  };
   const latest = release.tag_name.replace(/^v/i, "");
-  return { current, latest, url: release.html_url, hasUpdate: newer(latest, current) };
+  const assets = release.assets.map((a) => ({ name: a.name, url: a.browser_download_url }));
+  return { current, latest, url: release.html_url, hasUpdate: newer(latest, current), assets };
 }
 
 /** 距上次自动检查超过一天才检查；失败时静默。浏览器存储不可用时每次都检查 */

@@ -8,5 +8,13 @@ fn main() {
         let code = args[2].parse().map_or(1, venvdock_lib::run_ctrl_c_helper);
         std::process::exit(code);
     }
+    // 更新助手模式：等待旧版本退出后替换程序并启动新版本
+    if args.len() == 6 && args[1] == venvdock_lib::UPDATE_HELPER_ARG {
+        let (file, target) = (std::path::Path::new(&args[4]), std::path::Path::new(&args[5]));
+        let code = args[2]
+            .parse()
+            .map_or(1, |pid| venvdock_lib::run_update_helper(pid, &args[3], file, target));
+        std::process::exit(code);
+    }
     venvdock_lib::run()
 }

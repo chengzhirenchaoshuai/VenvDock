@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Appearance, Skin } from "./theme";
+import type { ReleaseAsset } from "./update";
 
 export interface EnvVar {
   key: string;
@@ -110,6 +111,8 @@ export const api = {
   stopProject: (id: string) => invoke<void>("stop_project", { id }),
   restartProject: (id: string) => invoke<void>("restart_project", { id }),
   startAll: () => invoke<void>("start_all"),
+  /** 下载并安装新版本；成功后程序会退出，由更新助手启动新版本 */
+  installUpdate: (version: string, assets: ReleaseAsset[]) => invoke<void>("install_update", { version, assets }),
   stopAll: () => invoke<void>("stop_all"),
   /** 订阅状态变化推送，返回取消订阅函数 */
   onStatus: (handler: (status: ProjectStatus) => void): Promise<UnlistenFn> =>

@@ -46,6 +46,10 @@ jobs:
 
       - name: 打包
         run: pnpm package
+        env:
+          # 更新签名私钥（仓库 secret），打包脚本用它给两个 exe 生成 .sig
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
@@ -54,3 +58,5 @@ jobs:
           files: |
             release/VenvDock_*_x64-setup.exe
             release/VenvDock_*_x64-portable.exe
+            release/VenvDock_*_x64-setup.exe.sig
+            release/VenvDock_*_x64-portable.exe.sig

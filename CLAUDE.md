@@ -15,6 +15,7 @@ Windows 托盘工具：托管 venv 中的服务或任意命令（启停、崩溃
 - `ProjectStatus.ready`：配置了网址的项目启动后由 `supervisor::ready_loop` 每 2 秒探测，连上前为 false（界面和托盘显示“启动中”、不给“打开”）；未配置网址的启动即为 true。手动停止 / 重启会清空 `last_exit_code`
 - 健康检查（`supervisor::health_loop`）由本程序结束进程时写 `kill_reason`，退出回调据此总是走退避重启；服务首次响应前不计失败
 - 通知（`notify.rs`）：安装版靠开始菜单快捷方式上的 AUMID；免安装版在 `HKCU\Software\Classes\AppUserModelId` 登记；开发版借用 PowerShell 的 AUMID
+- 自动更新（`updater.rs`）：前端从 GitHub API 取到发布文件列表后调用 `install_update`；后端用 `URLDownloadToFileW` 下载安装包及其 `.sig`，用 `minisign-verify` 和内置公钥校验签名（可信注释里的文件名须一致），只接受本仓库 Release 地址；私钥在 `..\ProjectKey\VenvDock\venvdock.key`，CI 用 secret `TAURI_SIGNING_PRIVATE_KEY`，`scripts/package.ps1` 负责签名；把自身复制到 `%TEMP%\venvdock-update` 作为助手（`--apply-update`，在 `main.rs` 中先于 Tauri 处理），本程序 `quit_app` 后由助手替换 exe（免安装版，先写 `.new` 再改名）或运行安装程序 `/P /UPDATE`（安装版，判断依据是 exe 旁有 `uninstall.exe`），再启动新版本；更新前运行中的项目记在 `resume.json`，新版本启动时恢复
 - 检查更新在前端直接请求 GitHub API（`src/update.ts`），发布由 `.github/workflows/release.yml` 在推送 `v*` 标签时完成
 - `src-tauri/src/applog.rs`：发布版没有控制台，程序自身的错误用 `applog::write` 记录（同时安装 panic 钩子），不要用 `eprintln!`
 

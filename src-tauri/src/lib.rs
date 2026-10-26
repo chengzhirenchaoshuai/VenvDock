@@ -5,9 +5,11 @@ mod notify;
 mod paths;
 mod runtime;
 mod tray;
+mod updater;
 mod window;
 
 pub use runtime::{CTRL_C_HELPER_ARG, run_ctrl_c_helper};
+pub use updater::{UPDATE_HELPER_ARG, run_helper as run_update_helper};
 
 use config::ConfigStore;
 use paths::AppPaths;
@@ -72,6 +74,7 @@ pub fn run() {
             applog::init(&paths.app_log);
             applog::write(&format!("VenvDock {} 启动", app.package_info().version));
             let store = ConfigStore::load(paths.config_file.clone());
+            let resume = updater::take_resume(&paths.resume_file);
             let settings = store.settings();
             let supervisor = Supervisor::new(app.handle().clone(), paths.log_dir.clone());
             app.manage(paths);
@@ -81,8 +84,16 @@ pub fn run() {
             notify::register(app.handle());
             tray::setup(app.handle())?;
             supervisor.start_auto_projects();
+            // 自动更新前在运行的项目，在新版本中恢复
+            for id in &resume {
+                let _ = supervisor.start(id);
+            }
             // 手动打开时总是显示窗口；开机自启时按设置决定，默认只在托盘（不创建 WebView）
             let boot_launch = std::env::args().any(|a| a == AUTOSTART_ARG);
+            if std::env::args().any(|a| a == updater::UPDATE_FAILED_ARG) {
+                applog::write("自动更新失败，助手重新打开了原有版本");
+                notify::update_failed(app.handle());
+            }
             if !boot_launch || settings.show_window_on_start {
                 window::show(app.handle());
             }
@@ -105,6 +116,7 @@ pub fn run() {
             commands::restart_project,
             commands::start_all,
             commands::stop_all,
+            commands::install_update,
         ])
         // 点击关闭按钮：默认隐藏到托盘；设置中关闭“最小化到托盘”时按托盘“退出”处理（先停止所有项目）
         .on_window_event(|win, event| {
